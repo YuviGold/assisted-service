@@ -46,7 +46,11 @@ endif
 
 all: build
 
-lint:
+_pre_commit_hooks:
+	@${ROOT_DIR}/.hooks/check-branch.sh
+	@${ROOT_DIR}/.hooks/check-commits.sh
+
+lint: _pre_commit_hooks
 	golangci-lint run -v
 
 $(BUILD_FOLDER):
