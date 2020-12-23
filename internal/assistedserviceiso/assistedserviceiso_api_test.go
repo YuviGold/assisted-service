@@ -49,14 +49,16 @@ var _ = Describe("AssistedServiceISO", func() {
 		BeforeEach(func() {
 			mockS3Client.EXPECT().IsAwsS3().Return(false)
 			mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
-			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), isoName)
+			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+				fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, common.DefaultTestOpenShiftVersion), isoName)
 		})
 
 		It("success", func() {
 			mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			ignitionParams := models.AssistedServiceIsoCreateParams{
-				SSHPublicKey: sshPublicKey,
-				PullSecret:   pullSecret,
+				SSHPublicKey:     sshPublicKey,
+				PullSecret:       pullSecret,
+				OpenshiftVersion: common.DefaultTestOpenShiftVersion,
 			}
 			generateReply := api.CreateISOAndUploadToS3(ctx, assisted_service_iso.CreateISOAndUploadToS3Params{
 				AssistedServiceIsoCreateParams: &ignitionParams,
@@ -67,8 +69,22 @@ var _ = Describe("AssistedServiceISO", func() {
 		It("failure when pull-secret is missing", func() {
 			mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			ignitionParams := models.AssistedServiceIsoCreateParams{
-				SSHPublicKey: sshPublicKey,
-				PullSecret:   "",
+				SSHPublicKey:     sshPublicKey,
+				PullSecret:       "",
+				OpenshiftVersion: common.DefaultTestOpenShiftVersion,
+			}
+			generateReply := api.CreateISOAndUploadToS3(ctx, assisted_service_iso.CreateISOAndUploadToS3Params{
+				AssistedServiceIsoCreateParams: &ignitionParams,
+			})
+			Expect(generateReply).Should(BeAssignableToTypeOf(assisted_service_iso.NewCreateISOAndUploadToS3BadRequest()))
+		})
+
+		It("failure when ocp version is missing", func() {
+			mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+			ignitionParams := models.AssistedServiceIsoCreateParams{
+				SSHPublicKey:     sshPublicKey,
+				PullSecret:       "",
+				OpenshiftVersion: "",
 			}
 			generateReply := api.CreateISOAndUploadToS3(ctx, assisted_service_iso.CreateISOAndUploadToS3Params{
 				AssistedServiceIsoCreateParams: &ignitionParams,
@@ -79,8 +95,9 @@ var _ = Describe("AssistedServiceISO", func() {
 		It("failure when pull-secret is wrong format", func() {
 			mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.Errorf("bad pull secret")).Times(1)
 			ignitionParams := models.AssistedServiceIsoCreateParams{
-				SSHPublicKey: sshPublicKey,
-				PullSecret:   "not-correct-format",
+				SSHPublicKey:     sshPublicKey,
+				PullSecret:       "not-correct-format",
+				OpenshiftVersion: common.DefaultTestOpenShiftVersion,
 			}
 			generateReply := api.CreateISOAndUploadToS3(ctx, assisted_service_iso.CreateISOAndUploadToS3Params{
 				AssistedServiceIsoCreateParams: &ignitionParams,
@@ -91,8 +108,9 @@ var _ = Describe("AssistedServiceISO", func() {
 		It("ssh public key is not required and request should be successful if it is missing", func() {
 			mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			ignitionParams := models.AssistedServiceIsoCreateParams{
-				SSHPublicKey: "",
-				PullSecret:   pullSecret,
+				SSHPublicKey:     "",
+				PullSecret:       pullSecret,
+				OpenshiftVersion: common.DefaultTestOpenShiftVersion,
 			}
 			generateReply := api.CreateISOAndUploadToS3(ctx, assisted_service_iso.CreateISOAndUploadToS3Params{
 				AssistedServiceIsoCreateParams: &ignitionParams,
@@ -103,8 +121,9 @@ var _ = Describe("AssistedServiceISO", func() {
 		It("multiple creates", func() {
 			mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			ignitionParams := models.AssistedServiceIsoCreateParams{
-				SSHPublicKey: sshPublicKey,
-				PullSecret:   pullSecret,
+				SSHPublicKey:     sshPublicKey,
+				PullSecret:       pullSecret,
+				OpenshiftVersion: common.DefaultTestOpenShiftVersion,
 			}
 			// first
 			generateReply := api.CreateISOAndUploadToS3(ctx, assisted_service_iso.CreateISOAndUploadToS3Params{
@@ -114,7 +133,8 @@ var _ = Describe("AssistedServiceISO", func() {
 			// second
 			mockS3Client.EXPECT().IsAwsS3().Return(false)
 			mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
-			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), isoName)
+			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+				fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, common.DefaultTestOpenShiftVersion), isoName)
 			mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			generateReply = api.CreateISOAndUploadToS3(ctx, assisted_service_iso.CreateISOAndUploadToS3Params{
 				AssistedServiceIsoCreateParams: &ignitionParams,

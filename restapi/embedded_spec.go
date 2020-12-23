@@ -3978,6 +3978,10 @@ func init() {
     "assisted-service-iso-create-params": {
       "type": "object",
       "properties": {
+        "openshift_version": {
+          "description": "Version of the OpenShift cluster.",
+          "type": "string"
+        },
         "pull_secret": {
           "description": "The pull secret obtained from Red Hat OpenShift Cluster Manager at cloud.redhat.com/openshift/install/pull-secret.",
           "type": "string"
@@ -9898,6 +9902,10 @@ func init() {
     "assisted-service-iso-create-params": {
       "type": "object",
       "properties": {
+        "openshift_version": {
+          "description": "Version of the OpenShift cluster.",
+          "type": "string"
+        },
         "pull_secret": {
           "description": "The pull secret obtained from Red Hat OpenShift Cluster Manager at cloud.redhat.com/openshift/install/pull-secret.",
           "type": "string"

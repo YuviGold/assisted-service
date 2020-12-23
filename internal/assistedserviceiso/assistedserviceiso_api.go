@@ -76,6 +76,13 @@ func (a *assistedServiceISOApi) CreateISOAndUploadToS3(ctx context.Context, para
 			WithPayload(common.GenerateError(http.StatusBadRequest, errors.New("Pull-secret must be provided for Assisted Service ISO")))
 	}
 
+	ocpVersion := params.AssistedServiceIsoCreateParams.OpenshiftVersion
+	if ocpVersion == "" {
+		log.Warn("OCP version for Assisted Service ISO must be provided")
+		return assisted_service_iso.NewCreateISOAndUploadToS3BadRequest().
+			WithPayload(common.GenerateError(http.StatusBadRequest, errors.New("OCP version must be provided for Assisted Service ISO")))
+	}
+
 	data, err := ioutil.ReadFile(a.config.IgnitionConfigBaseFilename)
 	if err != nil {
 		log.WithError(err).Errorf("Error reading ignition config file")
@@ -89,9 +96,10 @@ func (a *assistedServiceISOApi) CreateISOAndUploadToS3(ctx context.Context, para
 	ignitionConfig := reIgnition.Replace(ignitionConfigSource)
 
 	username := auth.UserNameFromContext(ctx)
-	isoName := fmt.Sprintf("%s%s", imgexpirer.AssistedServiceLiveISOPrefix, username)
+	srcObjectNameISO := fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, ocpVersion)
+	destObjectNameISO := fmt.Sprintf("%s%s", imgexpirer.AssistedServiceLiveISOPrefix, username)
 
-	if err = a.objectHandler.UploadISO(ctx, ignitionConfig, isoName); err != nil {
+	if err = a.objectHandler.UploadISO(ctx, ignitionConfig, srcObjectNameISO, destObjectNameISO); err != nil {
 		log.WithError(err).Errorf("Failed to generate Assisted Service ISO")
 		return common.NewApiError(http.StatusInternalServerError, err)
 	}

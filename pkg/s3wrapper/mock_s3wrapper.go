@@ -107,17 +107,17 @@ func (mr *MockAPIMockRecorder) UploadFile(ctx, filePath, objectName interface{})
 }
 
 // UploadISO mocks base method
-func (m *MockAPI) UploadISO(ctx context.Context, ignitionConfig, objectPrefix string) error {
+func (m *MockAPI) UploadISO(ctx context.Context, ignitionConfig, sourceObject, objectPrefix string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UploadISO", ctx, ignitionConfig, objectPrefix)
+	ret := m.ctrl.Call(m, "UploadISO", ctx, ignitionConfig, sourceObject, objectPrefix)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UploadISO indicates an expected call of UploadISO
-func (mr *MockAPIMockRecorder) UploadISO(ctx, ignitionConfig, objectPrefix interface{}) *gomock.Call {
+func (mr *MockAPIMockRecorder) UploadISO(ctx, ignitionConfig, sourceObject, objectPrefix interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadISO", reflect.TypeOf((*MockAPI)(nil).UploadISO), ctx, ignitionConfig, objectPrefix)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadISO", reflect.TypeOf((*MockAPI)(nil).UploadISO), ctx, ignitionConfig, sourceObject, objectPrefix)
 }
 
 // Download mocks base method

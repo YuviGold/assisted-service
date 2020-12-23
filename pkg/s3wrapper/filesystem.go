@@ -20,9 +20,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// baseISOName is the filename for the base ISO
-const baseISOName = "livecd.iso"
-
 type FSClient struct {
 	log     logrus.FieldLogger
 	basedir string
@@ -68,10 +65,10 @@ func (f *FSClient) UploadFile(ctx context.Context, filePath, objectName string) 
 	return f.Upload(ctx, data, objectName)
 }
 
-func (f *FSClient) UploadISO(ctx context.Context, ignitionConfig, objectPrefix string) error {
+func (f *FSClient) UploadISO(ctx context.Context, ignitionConfig, sourceObject, objectPrefix string) error {
 	log := logutil.FromContext(ctx, f.log)
 	resultFile := filepath.Join(f.basedir, fmt.Sprintf("%s.iso", objectPrefix))
-	baseFile := filepath.Join(f.basedir, baseISOName)
+	baseFile := filepath.Join(f.basedir, sourceObject)
 	err := os.Remove(resultFile)
 	if err != nil && !os.IsNotExist(err) {
 		log.Error("error attempting to remove any pre-existing ISO")

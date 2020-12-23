@@ -2684,6 +2684,9 @@ definitions:
   assisted-service-iso-create-params:
     type: object
     properties:
+      openshift_version:
+        type: string
+        description: Version of the OpenShift cluster.
       ssh_public_key:
         type: string
         description: SSH public key for debugging the installation.

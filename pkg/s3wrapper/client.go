@@ -28,16 +28,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const awsEndpointSuffix = ".amazonaws.com"
-
-// TODO: Eventually we should make the base image piece managed out-of-band.
-// Here, we are providing a fallback in the case an image isn't provided.
-const RHCOSBaseURL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/4.6/4.6.1/rhcos-4.6.1-x86_64-live.x86_64.iso"
-const RHCOSBaseObjectName = "rhcos-46.82.202010091720-0.iso"
-
-// We will need to modify this based on whatever is provided to the
-// assisted-service at runtime.
-var BaseObjectName string
+const (
+	awsEndpointSuffix           = ".amazonaws.com"
+	RHCOSBaseURLTemplate        = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/%s/latest/rhcos-live.x86_64.iso"
+	RHCOSBaseObjectNameTemplate = "rhcos-%s.iso"
+)
 
 //go:generate mockgen -source=client.go -package=s3wrapper -destination=mock_s3wrapper.go
 //go:generate mockgen -package s3wrapper -destination mock_s3iface.go github.com/aws/aws-sdk-go/service/s3/s3iface S3API
@@ -47,7 +42,7 @@ type API interface {
 	Upload(ctx context.Context, data []byte, objectName string) error
 	UploadStream(ctx context.Context, reader io.Reader, objectName string) error
 	UploadFile(ctx context.Context, filePath, objectName string) error
-	UploadISO(ctx context.Context, ignitionConfig, objectPrefix string) error
+	UploadISO(ctx context.Context, ignitionConfig, sourceObject, objectPrefix string) error
 	Download(ctx context.Context, objectName string) (io.ReadCloser, int64, error)
 	DoesObjectExist(ctx context.Context, objectName string) (bool, error)
 	DeleteObject(ctx context.Context, objectName string) (bool, error)
@@ -173,9 +168,9 @@ func (c *S3Client) UploadFile(ctx context.Context, filePath, objectName string) 
 	return c.UploadStream(ctx, reader, objectName)
 }
 
-func (c *S3Client) UploadISO(ctx context.Context, ignitionConfig, objectPrefix string) error {
+func (c *S3Client) UploadISO(ctx context.Context, ignitionConfig, sourceObject, objectPrefix string) error {
 	objectName := fmt.Sprintf("%s.iso", objectPrefix)
-	return c.isoUploader.UploadISO(ctx, ignitionConfig, objectName)
+	return c.isoUploader.UploadISO(ctx, ignitionConfig, sourceObject, objectName)
 }
 
 func (c *S3Client) Upload(ctx context.Context, data []byte, objectName string) error {

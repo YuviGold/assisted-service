@@ -20,6 +20,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const defaultTestRHCOSObject = "rhcos-object"
+
 var _ = Describe("s3client", func() {
 	var (
 		ctx         = context.Background()
@@ -117,15 +119,15 @@ var _ = Describe("s3client", func() {
 		success := func(hexBytes []byte, baseISOSize, areaOffset, areaLength int64, cached bool) {
 			uploadID := "12345"
 			destObjName := "object-prefix.iso"
-			copySource := fmt.Sprintf("/%s/%s", bucket, BaseObjectName)
+			copySource := fmt.Sprintf("/%s/%s", bucket, defaultTestRHCOSObject)
 
-			mockAPI.EXPECT().HeadObject(&s3.HeadObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName)}).
+			mockAPI.EXPECT().HeadObject(&s3.HeadObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject)}).
 				Return(&s3.HeadObjectOutput{ETag: aws.String("abcdefg"), ContentLength: aws.Int64(baseISOSize)}, nil)
 			if !cached {
-				mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName),
+				mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject),
 					Range: aws.String("bytes=32744-32767")}).
 					Return(&s3.GetObjectOutput{Body: ioutil.NopCloser(bytes.NewReader(hexBytes))}, nil)
-				mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName),
+				mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject),
 					Range: aws.String(fmt.Sprintf("bytes=%d-%d", areaOffset, areaOffset+minimumPartSizeBytes-1))}).
 					Return(&s3.GetObjectOutput{Body: ioutil.NopCloser(bytes.NewReader(make([]byte, 100)))}, nil)
 			}
@@ -172,7 +174,7 @@ var _ = Describe("s3client", func() {
 				Bucket: &bucket, Key: aws.String(destObjName), UploadId: &uploadID, MultipartUpload: &s3.CompletedMultipartUpload{Parts: comp},
 			}).Return(nil, nil)
 
-			err := client.UploadISO(ctx, "ignition", "object-prefix")
+			err := client.UploadISO(ctx, "ignition", defaultTestRHCOSObject, "object-prefix")
 			Expect(err).To(BeNil())
 		}
 		It("upload_iso_good_flow_v1", func() {
@@ -199,13 +201,13 @@ var _ = Describe("s3client", func() {
 			baseISOSize := int64(962592768)
 			uploadID := "12345"
 			destObjName := "object-prefix.iso"
-			copySource := fmt.Sprintf("/%s/%s", bucket, BaseObjectName)
+			copySource := fmt.Sprintf("/%s/%s", bucket, defaultTestRHCOSObject)
 
-			mockAPI.EXPECT().HeadObject(&s3.HeadObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName)}).
+			mockAPI.EXPECT().HeadObject(&s3.HeadObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject)}).
 				Return(&s3.HeadObjectOutput{ETag: aws.String("abcdefg"), ContentLength: aws.Int64(baseISOSize)}, nil)
-			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName), Range: aws.String("bytes=32744-32767")}).
+			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject), Range: aws.String("bytes=32744-32767")}).
 				Return(&s3.GetObjectOutput{Body: ioutil.NopCloser(bytes.NewReader(hexBytes))}, nil)
-			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName), Range: aws.String("bytes=8302592-13545471")}).
+			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject), Range: aws.String("bytes=8302592-13545471")}).
 				Return(&s3.GetObjectOutput{Body: ioutil.NopCloser(bytes.NewReader(make([]byte, 100)))}, nil)
 			mockAPI.EXPECT().CreateMultipartUploadWithContext(gomock.Any(), &s3.CreateMultipartUploadInput{Bucket: &bucket, Key: aws.String(destObjName)}).
 				Return(&s3.CreateMultipartUploadOutput{UploadId: aws.String(uploadID)}, nil)
@@ -217,7 +219,7 @@ var _ = Describe("s3client", func() {
 			mockAPI.EXPECT().UploadPart(gomock.Any()).Return(&s3.UploadPartOutput{ETag: aws.String("etagbar")}, nil).AnyTimes()
 			mockAPI.EXPECT().AbortMultipartUploadWithContext(gomock.Any(), &s3.AbortMultipartUploadInput{Bucket: &bucket, Key: aws.String(destObjName), UploadId: aws.String(uploadID)})
 
-			err := client.UploadISO(ctx, "ignition", "object-prefix")
+			err := client.UploadISO(ctx, "ignition", defaultTestRHCOSObject, "object-prefix")
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -230,13 +232,13 @@ var _ = Describe("s3client", func() {
 			baseISOSize := int64(962592768)
 			uploadID := "12345"
 			destObjName := "object-prefix.iso"
-			copySource := fmt.Sprintf("/%s/%s", bucket, BaseObjectName)
+			copySource := fmt.Sprintf("/%s/%s", bucket, defaultTestRHCOSObject)
 
-			mockAPI.EXPECT().HeadObject(&s3.HeadObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName)}).
+			mockAPI.EXPECT().HeadObject(&s3.HeadObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject)}).
 				Return(&s3.HeadObjectOutput{ETag: aws.String("abcdefg"), ContentLength: aws.Int64(baseISOSize)}, nil)
-			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName), Range: aws.String("bytes=32744-32767")}).
+			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject), Range: aws.String("bytes=32744-32767")}).
 				Return(&s3.GetObjectOutput{Body: ioutil.NopCloser(bytes.NewReader(hexBytes))}, nil)
-			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName), Range: aws.String("bytes=8302592-13545471")}).
+			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject), Range: aws.String("bytes=8302592-13545471")}).
 				Return(&s3.GetObjectOutput{Body: ioutil.NopCloser(bytes.NewReader(make([]byte, 100)))}, nil)
 			mockAPI.EXPECT().CreateMultipartUploadWithContext(gomock.Any(), &s3.CreateMultipartUploadInput{Bucket: &bucket, Key: aws.String(destObjName)}).
 				Return(&s3.CreateMultipartUploadOutput{UploadId: aws.String(uploadID)}, nil)
@@ -252,7 +254,7 @@ var _ = Describe("s3client", func() {
 			// validate that the context that is being used is not the canceled context
 			mockAPI.EXPECT().AbortMultipartUploadWithContext(gomock.Not(canceledCtx), &s3.AbortMultipartUploadInput{Bucket: &bucket, Key: aws.String(destObjName), UploadId: aws.String(uploadID)})
 
-			err := client.UploadISO(canceledCtx, "ignition", "object-prefix")
+			err := client.UploadISO(canceledCtx, "ignition", defaultTestRHCOSObject, "object-prefix")
 			Expect(err).To(HaveOccurred())
 		})
 		It("upload_iso_ignition_generate_failure", func() {
@@ -264,11 +266,11 @@ var _ = Describe("s3client", func() {
 			uploadID := "12345"
 			destObjName := "object-prefix.iso"
 
-			mockAPI.EXPECT().HeadObject(&s3.HeadObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName)}).
+			mockAPI.EXPECT().HeadObject(&s3.HeadObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject)}).
 				Return(&s3.HeadObjectOutput{ETag: aws.String("abcdefg"), ContentLength: aws.Int64(baseISOSize)}, nil)
-			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName), Range: aws.String("bytes=32744-32767")}).
+			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject), Range: aws.String("bytes=32744-32767")}).
 				Return(&s3.GetObjectOutput{Body: ioutil.NopCloser(bytes.NewReader(hexBytes))}, nil)
-			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(BaseObjectName), Range: aws.String("bytes=8302592-13545471")}).
+			mockAPI.EXPECT().GetObject(&s3.GetObjectInput{Bucket: &bucket, Key: aws.String(defaultTestRHCOSObject), Range: aws.String("bytes=8302592-13545471")}).
 				Return(&s3.GetObjectOutput{Body: ioutil.NopCloser(bytes.NewReader(make([]byte, 100)))}, nil)
 			mockAPI.EXPECT().CreateMultipartUploadWithContext(gomock.Any(), &s3.CreateMultipartUploadInput{Bucket: &bucket, Key: aws.String(destObjName)}).
 				Return(&s3.CreateMultipartUploadOutput{UploadId: aws.String(uploadID)}, nil)
@@ -278,7 +280,7 @@ var _ = Describe("s3client", func() {
 				Return(&s3.UploadPartOutput{ETag: aws.String("etag")}, errors.New("failed"))
 			mockAPI.EXPECT().AbortMultipartUploadWithContext(gomock.Any(), &s3.AbortMultipartUploadInput{Bucket: &bucket, Key: aws.String(destObjName), UploadId: aws.String(uploadID)})
 
-			err := client.UploadISO(ctx, "ignition", "object-prefix")
+			err := client.UploadISO(ctx, "ignition", defaultTestRHCOSObject, "object-prefix")
 			Expect(err).To(HaveOccurred())
 		})
 	})

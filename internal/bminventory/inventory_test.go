@@ -154,11 +154,13 @@ var _ = Describe("GenerateClusterISO", func() {
 
 	RunGenerateClusterISOTests := func() {
 		It("success", func() {
-			clusterId := registerCluster(true).ID
+			cluster := registerCluster(true)
+			clusterId := cluster.ID
 			mockS3Client.EXPECT().IsAwsS3().Return(false)
 			mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
 			mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), fmt.Sprintf("%s/discovery.ign", clusterId))
-			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), fmt.Sprintf("discovery-image-%s", clusterId.String()))
+			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+				fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), fmt.Sprintf("discovery-image-%s", clusterId.String()))
 			mockEvents.EXPECT().AddEvent(gomock.Any(), *clusterId, nil, models.EventSeverityInfo, "Generated image (SSH public key is not set)", gomock.Any())
 			generateReply := bm.GenerateClusterISO(ctx, installer.GenerateClusterISOParams{
 				ClusterID:         *clusterId,
@@ -170,11 +172,13 @@ var _ = Describe("GenerateClusterISO", func() {
 		})
 
 		It("success with proxy", func() {
-			clusterId := registerClusterWithHTTPProxy(true, "http://1.1.1.1:1234").ID
+			cluster := registerClusterWithHTTPProxy(true, "http://1.1.1.1:1234")
+			clusterId := cluster.ID
 			mockS3Client.EXPECT().IsAwsS3().Return(false)
 			mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
 			mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), gomock.Any())
-			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), gomock.Any())
+			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+				fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), gomock.Any())
 			mockEvents.EXPECT().AddEvent(gomock.Any(), *clusterId, nil, models.EventSeverityInfo, "Generated image (proxy URL is \"http://1.1.1.1:1234\", SSH public key "+
 				"is not set)", gomock.Any())
 			generateReply := bm.GenerateClusterISO(ctx, installer.GenerateClusterISOParams{
@@ -221,7 +225,8 @@ var _ = Describe("GenerateClusterISO", func() {
 
 			mockS3Client.EXPECT().IsAwsS3().Return(true)
 			mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), gomock.Any())
-			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), gomock.Any())
+			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+				fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), gomock.Any())
 			mockS3Client.EXPECT().UpdateObjectTimestamp(gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 			mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
 			mockS3Client.EXPECT().GeneratePresignedDownloadURL(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("", nil).Times(1)
@@ -236,10 +241,12 @@ var _ = Describe("GenerateClusterISO", func() {
 		})
 
 		It("success with AWS S3", func() {
-			clusterId := registerCluster(true).ID
+			cluster := registerCluster(true)
+			clusterId := cluster.ID
 			mockS3Client.EXPECT().IsAwsS3().Return(true)
 			mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), gomock.Any())
-			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), gomock.Any())
+			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+				fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), gomock.Any())
 			mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
 			mockS3Client.EXPECT().GeneratePresignedDownloadURL(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("", nil).Times(1)
 			mockEvents.EXPECT().AddEvent(gomock.Any(), *clusterId, nil, models.EventSeverityInfo, "Generated image (SSH public key is not set)", gomock.Any())
@@ -261,9 +268,11 @@ var _ = Describe("GenerateClusterISO", func() {
 		})
 
 		It("failed_to_upload_iso", func() {
-			clusterId := registerCluster(true).ID
+			cluster := registerCluster(true)
+			clusterId := cluster.ID
 			mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), gomock.Any())
-			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("failed"))
+			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+				fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), gomock.Any()).Return(errors.New("failed"))
 			mockEvents.EXPECT().AddEvent(gomock.Any(), *clusterId, nil, models.EventSeverityError, gomock.Any(), gomock.Any())
 			generateReply := bm.GenerateClusterISO(ctx, installer.GenerateClusterISOParams{
 				ClusterID:         *clusterId,
@@ -286,7 +295,8 @@ var _ = Describe("GenerateClusterISO", func() {
 			cluster.PullSecret = "{\"auths\":{\"another.cloud.com\":{\"auth\":\"dG9rZW46dGVzdAo=\",\"email\":\"coyote@acme.com\"}}}"
 			clusterId := cluster.ID
 			mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), gomock.Any())
-			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("failed"))
+			mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+				fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), gomock.Any()).Return(errors.New("failed"))
 			mockEvents.EXPECT().AddEvent(gomock.Any(), *clusterId, nil, models.EventSeverityError, gomock.Any(), gomock.Any())
 			generateReply := bm.GenerateClusterISO(ctx, installer.GenerateClusterISOParams{
 				ClusterID:         *clusterId,
@@ -321,11 +331,13 @@ var _ = Describe("GenerateClusterISO", func() {
 			}
 
 			It("static ips config - success", func() {
-				clusterId := registerCluster(true).ID
+				cluster := registerCluster(true)
+				clusterId := cluster.ID
 				mockS3Client.EXPECT().IsAwsS3().Return(false)
 				mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
 				mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), fmt.Sprintf("%s/discovery.ign", clusterId))
-				mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), fmt.Sprintf("discovery-image-%s", clusterId.String()))
+				mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+					fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), fmt.Sprintf("discovery-image-%s", clusterId.String()))
 				mockEvents.EXPECT().AddEvent(gomock.Any(), *clusterId, nil, models.EventSeverityInfo, "Generated image (SSH public key is not set)", gomock.Any())
 				generateReply := bm.GenerateClusterISO(ctx, installer.GenerateClusterISOParams{
 					ClusterID:         *clusterId,
@@ -335,11 +347,13 @@ var _ = Describe("GenerateClusterISO", func() {
 			})
 
 			It("static ip config  - same static ip config image already exists", func() {
-				clusterId := registerCluster(true).ID
+				cluster := registerCluster(true)
+				clusterId := cluster.ID
 				mockS3Client.EXPECT().IsAwsS3().Return(false)
 				mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
 				mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), fmt.Sprintf("%s/discovery.ign", clusterId))
-				mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), fmt.Sprintf("discovery-image-%s", clusterId.String()))
+				mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+					fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), fmt.Sprintf("discovery-image-%s", clusterId.String()))
 				mockEvents.EXPECT().AddEvent(gomock.Any(), *clusterId, nil, models.EventSeverityInfo, "Generated image (SSH public key is not set)", gomock.Any())
 				generateReply := bm.GenerateClusterISO(ctx, installer.GenerateClusterISOParams{
 					ClusterID:         *clusterId,
@@ -379,11 +393,13 @@ var _ = Describe("GenerateClusterISO", func() {
 			})
 
 			It("static ip config  - different static ip config", func() {
-				clusterId := registerCluster(true).ID
+				cluster := registerCluster(true)
+				clusterId := cluster.ID
 				mockS3Client.EXPECT().IsAwsS3().Return(false)
 				mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
 				mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), fmt.Sprintf("%s/discovery.ign", clusterId))
-				mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), fmt.Sprintf("discovery-image-%s", clusterId.String()))
+				mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+					fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), fmt.Sprintf("discovery-image-%s", clusterId.String()))
 				mockEvents.EXPECT().AddEvent(gomock.Any(), *clusterId, nil, models.EventSeverityInfo, "Generated image (SSH public key is not set)", gomock.Any())
 				generateReply := bm.GenerateClusterISO(ctx, installer.GenerateClusterISOParams{
 					ClusterID:         *clusterId,
@@ -413,7 +429,8 @@ var _ = Describe("GenerateClusterISO", func() {
 				mockS3Client.EXPECT().IsAwsS3().Return(false)
 				mockS3Client.EXPECT().GetObjectSizeBytes(gomock.Any(), gomock.Any()).Return(int64(100), nil).Times(1)
 				mockS3Client.EXPECT().Upload(gomock.Any(), gomock.Any(), fmt.Sprintf("%s/discovery.ign", clusterId))
-				mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(), fmt.Sprintf("discovery-image-%s", clusterId.String()))
+				mockS3Client.EXPECT().UploadISO(gomock.Any(), gomock.Any(),
+					fmt.Sprintf(s3wrapper.RHCOSBaseObjectNameTemplate, cluster.OpenshiftVersion), fmt.Sprintf("discovery-image-%s", clusterId.String()))
 				mockEvents.EXPECT().AddEvent(gomock.Any(), *clusterId, nil, models.EventSeverityInfo, "Generated image (SSH public key is not set)", gomock.Any())
 
 				generateReply = bm.GenerateClusterISO(ctx, installer.GenerateClusterISOParams{

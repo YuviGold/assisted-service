@@ -61,17 +61,3 @@ func (mr *MockISOInstallConfigGeneratorMockRecorder) GenerateInstallConfig(arg0,
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateInstallConfig", reflect.TypeOf((*MockISOInstallConfigGenerator)(nil).GenerateInstallConfig), arg0, arg1, arg2, arg3)
 }
-
-// UploadBaseISO mocks base method
-func (m *MockISOInstallConfigGenerator) UploadBaseISO() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UploadBaseISO")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UploadBaseISO indicates an expected call of UploadBaseISO
-func (mr *MockISOInstallConfigGeneratorMockRecorder) UploadBaseISO() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBaseISO", reflect.TypeOf((*MockISOInstallConfigGenerator)(nil).UploadBaseISO))
-}
