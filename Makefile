@@ -30,7 +30,6 @@ export SERVICE := $(or ${SERVICE},${ASSISTED_ORG}/assisted-service:${ASSISTED_TA
 CONTAINER_BUILD_PARAMS = --network=host --label git_revision=${GIT_REVISION} ${CONTAINER_BUILD_EXTRA_PARAMS}
 
 # RHCOS_VERSION should be consistent with BaseObjectName in pkg/s3wrapper/client.go
-RHCOS_BASE_ISO := $(or ${RHCOS_BASE_ISO},https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/4.6/latest/rhcos-live.x86_64.iso)
 OPENSHIFT_VERSIONS := $(or ${OPENSHIFT_VERSIONS}, $(subst ",\",$(shell cat default_ocp_versions.json | tr -d "\n\t ")))
 DUMMY_IGNITION := $(or ${DUMMY_IGNITION},False)
 GIT_REVISION := $(shell git rev-parse HEAD)
@@ -168,6 +167,9 @@ endif
 _verify_minikube:
 	minikube status
 
+init:
+	./handle_ocp_versions.py
+
 deploy-all: $(BUILD_FOLDER) deploy-namespace deploy-postgres deploy-s3 deploy-ocm-secret deploy-route53 deploy-service
 	echo "Deployment done"
 
@@ -247,19 +249,18 @@ verify-latest-onprem-config: generate-onprem-environment generate-onprem-iso-ign
 podman-pull-service-from-docker-daemon:
 	podman pull "docker-daemon:${SERVICE}"
 
-deploy-onprem:
+deploy-onprem: init
 	# Format: ip:hostPort:containerPort | ip::containerPort | hostPort:containerPort | containerPort
 	podman pod create --name assisted-installer -p 5432:5432,8000:8000,8090:8090,8080:8080
 	# These are required because when running on RHCOS livecd, the coreos-installer binary and
 	# livecd are bind-mounted from the host into the assisted-service container at runtime.
-	[ -f livecd.iso ] || ./hack/retry.sh 5 1 "curl $(RHCOS_BASE_ISO) -o livecd.iso"
 	[ -f coreos-installer ] || podman run --privileged --pull=always -it --rm \
 		-v .:/data -w /data --entrypoint /bin/bash \
 		quay.io/coreos/coreos-installer:v0.7.0 -c 'cp /usr/sbin/coreos-installer /data/coreos-installer'
 	podman run -dt --pod assisted-installer --env-file onprem-environment --pull always --name db quay.io/ocpmetal/postgresql-12-centos7
 	podman run -dt --pod assisted-installer --env-file onprem-environment --pull always -v $(PWD)/deploy/ui/nginx.conf:/opt/bitnami/nginx/conf/server_blocks/nginx.conf:z --name ui quay.io/ocpmetal/ocp-metal-ui:latest
 	podman run -dt --pod assisted-installer --env-file onprem-environment ${PODMAN_PULL_FLAG} --env DUMMY_IGNITION=$(DUMMY_IGNITION) \
-		-v ./livecd.iso:/data/livecd.iso:z \
+		-v ./build/rhcos/rhcos-4.6.iso:/data/livecd.iso:z \
 		-v ./coreos-installer:/data/coreos-installer:z \
 		--restart always --name installer $(SERVICE)
 
@@ -344,7 +345,6 @@ clear-images:
 
 clean-onprem:
 	podman pod rm -f assisted-installer | true
-	rm livecd.iso | true
 	rm coreos-installer | true
 
 delete-minikube-profile:

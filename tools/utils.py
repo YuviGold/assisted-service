@@ -60,8 +60,12 @@ def set_namespace_in_yaml_docs(docs, ns):
             continue
 
 
-def check_output(cmd):
+def check_output(cmd: str) -> str:
     return subprocess.check_output(cmd, shell=True).decode("utf-8")
+
+
+def check_call(cmd: str) -> int:
+    return subprocess.check_call(cmd, shell=True)
 
 
 def get_service_host(

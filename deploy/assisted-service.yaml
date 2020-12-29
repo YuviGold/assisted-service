@@ -119,8 +119,15 @@ spec:
             - name: route53-creds
               mountPath: "/etc/.aws"
               readOnly: true
+            - name: rhcos-dir
+              mountPath: "/data/iso"
+              readOnly: true
       volumes:
         - name: route53-creds
           secret:
             secretName: route53-creds
             optional: true
+        - name: rhcos-dir
+          hostPath:
+            path: "/etc/kubernetes/static-pod-resources/keepalived"
+            type: Directory
