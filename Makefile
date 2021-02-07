@@ -238,6 +238,7 @@ deploy-role: deploy-namespace manifests
 
 deploy-postgres: deploy-namespace
 	python3 ./tools/deploy_postgres.py --namespace "$(NAMESPACE)" --profile "$(PROFILE)" --target "$(TARGET)"
+	helm install -f ./charts/postgres_values.yaml -n "$(NAMESPACE)" assisted bitnami/postgresql
 
 deploy-service-on-ocp-cluster:
 	export TARGET=ocp && $(MAKE) deploy-postgres deploy-ocm-secret deploy-s3-secret deploy-service
@@ -317,8 +318,8 @@ subsystem-run: test subsystem-clean
 
 test:
 	INVENTORY=$(shell $(call get_service,assisted-service) | sed 's/http:\/\///g') \
-		DB_HOST=$(shell $(call get_service,postgres) | sed 's/http:\/\///g' | cut -d ":" -f 1) \
-		DB_PORT=$(shell $(call get_service,postgres) | sed 's/http:\/\///g' | cut -d ":" -f 2) \
+		DB_HOST=$(shell $(call get_service,assisted-postgresql) | sed 's/http:\/\///g' | cut -d ":" -f 1) \
+		DB_PORT=$(shell $(call get_service,assisted-postgresql) | sed 's/http:\/\///g' | cut -d ":" -f 2) \
 		OCM_HOST=$(shell $(call get_service,wiremock) | sed 's/http:\/\///g') \
 		TEST_TOKEN="$(shell cat $(BUILD_FOLDER)/auth-tokenString)" \
 		TEST_TOKEN_ADMIN="$(shell cat $(BUILD_FOLDER)/auth-tokenAdminString)" \
