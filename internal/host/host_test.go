@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -1692,9 +1693,9 @@ var _ = Describe("UpdateImageStatus", func() {
 			expectedImage := &models.ContainerImageAvailability{
 				Name:         t.newImageStatus.Name,
 				Result:       t.newImageStatus.Result,
+				DownloadRate: t.newImageStatus.DownloadRate,
 				SizeBytes:    t.newImageStatus.SizeBytes,
 				Time:         t.newImageStatus.Time,
-				DownloadRate: t.newImageStatus.DownloadRate,
 			}
 
 			if len(t.originalImageStatuses) == 0 {
@@ -1704,6 +1705,10 @@ var _ = Describe("UpdateImageStatus", func() {
 				mockEvents.EXPECT().AddEvent(gomock.Any(), clusterId, &hostId, models.EventSeverityInfo, eventMsg, gomock.Any()).Times(1)
 				mockMetric.EXPECT().ImagePullStatus(clusterId, hostId, expectedImage.Name, string(expectedImage.Result), expectedImage.DownloadRate).Times(1)
 			} else {
+				expectedImage.DownloadRate = math.Max(expectedImage.DownloadRate, t.originalImageStatuses[common.TestDefaultConfig.ImageName].DownloadRate)
+				expectedImage.SizeBytes = math.Max(expectedImage.SizeBytes, t.originalImageStatuses[common.TestDefaultConfig.ImageName].SizeBytes)
+				expectedImage.Time = math.Max(expectedImage.Time, t.originalImageStatuses[common.TestDefaultConfig.ImageName].Time)
+
 				bytes, err := json.Marshal(t.originalImageStatuses)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(bytes).ShouldNot(BeNil())
