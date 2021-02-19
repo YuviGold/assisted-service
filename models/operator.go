@@ -6,9 +6,12 @@ package models
 // Editing this file might prove futile when you re-run the swagger generate command
 
 import (
+	"encoding/json"
+
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
+	"github.com/go-openapi/validate"
 )
 
 // Operator operator
@@ -16,19 +19,26 @@ import (
 // swagger:model operator
 type Operator struct {
 
-	// enabled
-	Enabled *bool `json:"enabled,omitempty"`
+	// Unique name of the operator.
+	// Required: true
+	Name *string `json:"name"`
 
-	// operator type
-	OperatorType OperatorType `json:"operator_type,omitempty"`
+	// Kind of operator. Different types are monitored by the service differently.
+	// Required: true
+	// Enum: [builtin olm]
+	OperatorType *string `json:"operator_type"`
 
-	// JSON-formatted string containing the properties for each operator
-	Properties string `json:"properties,omitempty"`
+	// Positive number represents a timeout in seconds for the operator to be available.
+	TimeoutSeconds int64 `json:"timeout_seconds,omitempty"`
 }
 
 // Validate validates this operator
 func (m *Operator) Validate(formats strfmt.Registry) error {
 	var res []error
+
+	if err := m.validateName(formats); err != nil {
+		res = append(res, err)
+	}
 
 	if err := m.validateOperatorType(formats); err != nil {
 		res = append(res, err)
@@ -40,16 +50,52 @@ func (m *Operator) Validate(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *Operator) validateOperatorType(formats strfmt.Registry) error {
+func (m *Operator) validateName(formats strfmt.Registry) error {
 
-	if swag.IsZero(m.OperatorType) { // not required
-		return nil
+	if err := validate.Required("name", "body", m.Name); err != nil {
+		return err
 	}
 
-	if err := m.OperatorType.Validate(formats); err != nil {
-		if ve, ok := err.(*errors.Validation); ok {
-			return ve.ValidateName("operator_type")
-		}
+	return nil
+}
+
+var operatorTypeOperatorTypePropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["builtin","olm"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		operatorTypeOperatorTypePropEnum = append(operatorTypeOperatorTypePropEnum, v)
+	}
+}
+
+const (
+
+	// OperatorOperatorTypeBuiltin captures enum value "builtin"
+	OperatorOperatorTypeBuiltin string = "builtin"
+
+	// OperatorOperatorTypeOlm captures enum value "olm"
+	OperatorOperatorTypeOlm string = "olm"
+)
+
+// prop value enum
+func (m *Operator) validateOperatorTypeEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, operatorTypeOperatorTypePropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Operator) validateOperatorType(formats strfmt.Registry) error {
+
+	if err := validate.Required("operator_type", "body", m.OperatorType); err != nil {
+		return err
+	}
+
+	// value enum
+	if err := m.validateOperatorTypeEnum("operator_type", "body", *m.OperatorType); err != nil {
 		return err
 	}
 

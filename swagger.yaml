@@ -2500,14 +2500,14 @@ paths:
           schema:
             $ref: '#/definitions/error'
 
-  /clusters/{cluster_id}/operators:
+  /clusters/{cluster_id}/monitored_operators:
     get:
       tags:
         - operators
         - installer
       security:
         - agentAuth: []
-      description: Lists operators for a cluster.
+      description: Lists operators to be monitored for a cluster.
       operationId: ListOfClusterOperators
       parameters:
         - in: path
@@ -2522,8 +2522,10 @@ paths:
           type: string
           required: false
       responses:
-        "201":
+        "200":
           description: Success.
+          schema:
+            $ref: '#/definitions/monitored-operators-list'
         "401":
           description: Unauthorized.
           schema:
@@ -2544,14 +2546,14 @@ paths:
           description: Error.
           schema:
             $ref: '#/definitions/error'
-    post:
+    put:
       tags:
         - operators
         - installer
       security:
         - agentAuth: []
       description: Controller API to report of monitored operators.
-      operationId: ReportMonitoredOperators
+      operationId: ReportMonitoredOperatorStatus
       parameters:
         - in: path
           name: cluster_id
@@ -2566,7 +2568,7 @@ paths:
           schema:
             $ref: '#/definitions/operator-monitor-report'
       responses:
-        "202":
+        "200":
           description: Success.
           schema:
             $ref: '#/definitions/cluster'
@@ -2659,7 +2661,7 @@ paths:
         "200":
           description: Success.
           schema:
-            $ref: '#/definitions/operators-list'
+            $ref: '#/definitions/monitored-operators-list'
         "401":
           description: Unauthorized.
           schema:
@@ -2880,80 +2882,58 @@ paths:
             $ref: '#/definitions/error'
 
 definitions:
-  operator:
+  monitored-operator:
     type: object
-    required:
-      - name
-      - operator_type
     properties:
       name:
         type: string
         description: Unique name of the operator.
       operator_type:
+        $ref: '#/definitions/operator-type'
+      properties:
         type: string
-        enum: ['built-in', 'custom']
-        description: Kind of operator. Different types are monitored by the service differently.
-      timeout:
+        description: Blob of operator-dependent parameters that are required for installation.
+        x-go-custom-tag: gorm:"type:text"
+      timeout_seconds:
         type: integer
         description: Positive number represents a timeout in seconds for the operator to be available.
-
-  operator-status:
-    type: object
-    required:
-      - id
-      - cluster_id
-    properties:
-      id:
+      status:
+        $ref: '#/definitions/operator-status'
+      status_info:
         type: string
-        format: uuid
-        description: Unique identifier of the object.
-        x-go-custom-tag: gorm:"primary_key"
-      cluster_id:
-        type: string
-        format: uuid
-        description: The cluster that this operator is associated with.
-        x-go-custom-tag: gorm:"primary_key;foreignkey:Cluster"
-      properties:
-        $ref: '#/definitions/operator'
-      report:
-        $ref: '#/definitions/operator-report'
+        description: Detailed information about the operator state.
       status_updated_at:
         type: string
         format: date-time
         x-go-custom-tag: gorm:"type:timestamp with time zone"
         description: Time at which the operator was last updated.
 
-  operator-report:
+  operator-monitor-report:
     type: object
-    description: Monitor report details of an operator.
-    required:
-      - status
     properties:
-      namespace:
+      name:
         type: string
-        description: The k8s namespace of the operator. Not all operators have a namespace.
+        description: Unique name of the operator.
       status:
-        type: string
+        $ref: '#/definitions/operator-status'
       status_info:
         type: string
         description: Detailed information about the operator state.
 
-  operators-list:
+  operator-type:
+    type: string
+    enum: ['builtin', 'olm']
+    description: Kind of operator. Different types are monitored by the service differently.
+
+  operator-status:
+    type: string
+    enum: ['failed', 'progressing', 'available']
+    description: Represents the operator state.
+
+  monitored-operators-list:
     type: array
     items:
-      $ref: '#/definitions/operator'
-
-  operator-monitor-report:
-    type: object
-    required:
-      - operator_name
-      - report
-    properties:
-      operator_name:
-        type: string
-        description: Unique name of the operator.
-      report:
-        $ref: '#/definitions/operator-report'
+      $ref: '#/definitions/monitored-operator'
 
   list-managed-domains:
     type: array
@@ -3440,9 +3420,9 @@ definitions:
         type: string
         description: A comma-separated list of NTP sources (name or IP) going to be added to all the hosts.
         x-nullable: true
-      custom_operators:
+      olm_operators:
         type: array
-        description: List of custom operators to be installed.
+        description: List of OLM operators to be installed.
         items:
           type: string
 
@@ -3580,9 +3560,9 @@ definitions:
         type: string
         description: A comma-separated list of NTP sources (name or IP) going to be added to all the hosts.
         x-nullable: true
-      custom_operators:
+      olm_operators:
         type: array
-        description: List of custom operators to be installed.
+        description: List of OLM operators to be installed.
         items:
           type: string
 
@@ -3810,13 +3790,13 @@ definitions:
       progress:
         $ref: '#/definitions/cluster-progress-info'
         x-go-custom-tag: gorm:"embedded;embedded_prefix:progress_"
-      operators:
+      monitored_operators:
         x-go-custom-tag: gorm:"foreignkey:ClusterID;association_foreignkey:ID"
         type: array
         description: Operators that are associated with this cluster.
         items:
           type: object
-          $ref: '#/definitions/operator-status'
+          $ref: '#/definitions/monitored-operator'
 
   image_info:
     type: object

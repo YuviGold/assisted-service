@@ -46,6 +46,7 @@ import (
 	"github.com/openshift/assisted-service/internal/manifests"
 	"github.com/openshift/assisted-service/internal/metrics"
 	"github.com/openshift/assisted-service/internal/network"
+	"github.com/openshift/assisted-service/internal/operators"
 	"github.com/openshift/assisted-service/internal/versions"
 	"github.com/openshift/assisted-service/models"
 	"github.com/openshift/assisted-service/pkg/auth"
@@ -286,22 +287,23 @@ type CRDUtils interface {
 }
 type bareMetalInventory struct {
 	Config
-	db               *gorm.DB
-	log              logrus.FieldLogger
-	hostApi          host.API
-	clusterApi       clusterPkg.API
-	eventsHandler    events.Handler
-	objectHandler    s3wrapper.API
-	metricApi        metrics.API
-	generator        generator.ISOInstallConfigGenerator
-	authHandler      auth.AuthHandler
-	k8sClient        k8sclient.K8SClient
-	ocmClient        *ocm.Client
-	leaderElector    leader.Leader
-	secretValidator  validations.PullSecretValidator
-	versionsHandler  versions.Handler
-	isoEditorFactory isoeditor.Factory
-	crdUtils         CRDUtils
+	db                 *gorm.DB
+	log                logrus.FieldLogger
+	hostApi            host.API
+	clusterApi         clusterPkg.API
+	eventsHandler      events.Handler
+	objectHandler      s3wrapper.API
+	metricApi          metrics.API
+	operatorManagerApi operators.OperatorManagerAPI
+	generator          generator.ISOInstallConfigGenerator
+	authHandler        auth.AuthHandler
+	k8sClient          k8sclient.K8SClient
+	ocmClient          *ocm.Client
+	leaderElector      leader.Leader
+	secretValidator    validations.PullSecretValidator
+	versionsHandler    versions.Handler
+	isoEditorFactory   isoeditor.Factory
+	crdUtils           CRDUtils
 }
 
 func (b *bareMetalInventory) UpdateClusterInstallProgress(ctx context.Context, params installer.UpdateClusterInstallProgressParams) middleware.Responder {
@@ -326,6 +328,7 @@ func NewBareMetalInventory(
 	eventsHandler events.Handler,
 	objectHandler s3wrapper.API,
 	metricApi metrics.API,
+	operatorManagerApi operators.OperatorManagerAPI,
 	authHandler auth.AuthHandler,
 	k8sClient k8sclient.K8SClient,
 	ocmClient *ocm.Client,
@@ -336,23 +339,24 @@ func NewBareMetalInventory(
 	crdUtils CRDUtils,
 ) *bareMetalInventory {
 	return &bareMetalInventory{
-		db:               db,
-		log:              log,
-		Config:           cfg,
-		hostApi:          hostApi,
-		clusterApi:       clusterApi,
-		generator:        generator,
-		eventsHandler:    eventsHandler,
-		objectHandler:    objectHandler,
-		metricApi:        metricApi,
-		authHandler:      authHandler,
-		k8sClient:        k8sClient,
-		ocmClient:        ocmClient,
-		leaderElector:    leaderElector,
-		secretValidator:  pullSecretValidator,
-		versionsHandler:  versionsHandler,
-		isoEditorFactory: isoEditorFactory,
-		crdUtils:         crdUtils,
+		db:                 db,
+		log:                log,
+		Config:             cfg,
+		hostApi:            hostApi,
+		clusterApi:         clusterApi,
+		generator:          generator,
+		eventsHandler:      eventsHandler,
+		objectHandler:      objectHandler,
+		metricApi:          metricApi,
+		operatorManagerApi: operatorManagerApi,
+		authHandler:        authHandler,
+		k8sClient:          k8sClient,
+		ocmClient:          ocmClient,
+		leaderElector:      leaderElector,
+		secretValidator:    pullSecretValidator,
+		versionsHandler:    versionsHandler,
+		isoEditorFactory:   isoEditorFactory,
+		crdUtils:           crdUtils,
 	}
 }
 
@@ -632,6 +636,26 @@ func (b *bareMetalInventory) RegisterClusterInternal(
 		kubeKey = &types.NamespacedName{}
 	}
 
+	operatorsStatuses := make([]*models.OperatorStatus, 0)
+	for _, builtinOperator := range b.operatorManagerApi.GetOperatorsByType(models.OperatorOperatorTypeBuiltin) {
+		operatorsStatuses = append(operatorsStatuses, &models.OperatorStatus{
+			Properties: builtinOperator,
+		})
+	}
+
+	if params.NewClusterParams.OlmOperators != nil {
+		for _, operatorName := range params.NewClusterParams.OlmOperators {
+			operator, err := b.operatorManagerApi.GetOperatorByName(operatorName)
+			if err != nil {
+				return nil, common.NewApiError(http.StatusBadRequest, err)
+			}
+
+			operatorsStatuses = append(operatorsStatuses, &models.OperatorStatus{
+				Properties: operator,
+			})
+		}
+	}
+
 	cluster := common.Cluster{
 		Cluster: models.Cluster{
 			ID:                       &id,
@@ -655,7 +679,7 @@ func (b *bareMetalInventory) RegisterClusterInternal(
 			VipDhcpAllocation:        params.NewClusterParams.VipDhcpAllocation,
 			UserManagedNetworking:    params.NewClusterParams.UserManagedNetworking,
 			AdditionalNtpSource:      swag.StringValue(params.NewClusterParams.AdditionalNtpSource),
-			Operators:                convertFromClusterOperators(params.NewClusterParams.Operators),
+			Operators:                operatorsStatuses,
 			HighAvailabilityMode:     params.NewClusterParams.HighAvailabilityMode,
 		},
 		KubeKeyName:      kubeKey.Name,
@@ -737,22 +761,6 @@ func (b *bareMetalInventory) integrateWithAMSClusterRegistration(ctx context.Con
 		return err
 	}
 	return nil
-}
-
-func convertFromClusterOperators(operators models.ListOperators) string {
-	if operators == nil {
-		return ""
-	} else {
-		var clusterOperators []*models.ClusterOperator
-		for _, operator := range operators {
-			clusterOperators = append(clusterOperators, &models.ClusterOperator{OperatorType: operator.OperatorType, Enabled: operator.Enabled, Properties: operator.Properties})
-		}
-		reply, err := json.Marshal(clusterOperators)
-		if err != nil {
-			return ""
-		}
-		return string(reply)
-	}
 }
 
 func verifyMinimalOpenShiftVersionForSingleNode(requestedOpenshiftVersion string) error {
@@ -1975,10 +1983,30 @@ func (b *bareMetalInventory) updateClusterData(ctx context.Context, cluster *com
 		return common.NewApiError(http.StatusBadRequest, err)
 	}
 
-	if params.ClusterUpdateParams.Operators != nil {
-		clusterOperators := convertFromClusterOperators(params.ClusterUpdateParams.Operators)
-		updates["operators"] = clusterOperators
-		cluster.Operators = clusterOperators
+	if params.ClusterUpdateParams.OlmOperators != nil {
+		newListOfOperators := make([]*models.OperatorStatus, 0)
+
+		// Keep all the operators that aren't OLMs
+		for _, operator := range cluster.Operators {
+			if swag.StringValue(operator.Properties.OperatorType) != models.OperatorOperatorTypeOlm {
+				newListOfOperators = append(newListOfOperators, operator)
+			}
+		}
+
+		// Add the new ones
+		for _, olmOperator := range params.ClusterUpdateParams.OlmOperators {
+			operator, err := b.operatorManagerApi.GetOperatorByName(olmOperator)
+			if err != nil {
+				return common.NewApiError(http.StatusBadRequest, err)
+			}
+
+			newListOfOperators = append(newListOfOperators, &models.OperatorStatus{
+				Properties: operator,
+			})
+		}
+
+		updates["operators"] = newListOfOperators
+		cluster.Operators = newListOfOperators
 	}
 
 	if params.ClusterUpdateParams.PullSecret != nil {

@@ -3,7 +3,16 @@ package lso
 import (
 	"bytes"
 	"text/template"
+
+	"github.com/go-openapi/swag"
+	"github.com/openshift/assisted-service/models"
 )
+
+var Operator models.Operator = models.Operator{
+	Name:           swag.String("lso"),
+	OperatorType:   swag.String(models.OperatorOperatorTypeOlm),
+	TimeoutSeconds: 60 * 60,
+}
 
 func lsoSubscription(OpenShiftVersion string) (string, error) {
 	data := map[string]string{
