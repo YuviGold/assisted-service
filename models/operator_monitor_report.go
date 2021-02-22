@@ -9,7 +9,6 @@ import (
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
-	"github.com/go-openapi/validate"
 )
 
 // OperatorMonitorReport operator monitor report
@@ -18,23 +17,20 @@ import (
 type OperatorMonitorReport struct {
 
 	// Unique name of the operator.
-	// Required: true
-	OperatorName *string `json:"operator_name"`
+	Name string `json:"name,omitempty"`
 
-	// report
-	// Required: true
-	Report *OperatorReport `json:"report"`
+	// status
+	Status OperatorStatus `json:"status,omitempty"`
+
+	// Detailed information about the operator state.
+	StatusInfo string `json:"status_info,omitempty"`
 }
 
 // Validate validates this operator monitor report
 func (m *OperatorMonitorReport) Validate(formats strfmt.Registry) error {
 	var res []error
 
-	if err := m.validateOperatorName(formats); err != nil {
-		res = append(res, err)
-	}
-
-	if err := m.validateReport(formats); err != nil {
+	if err := m.validateStatus(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -44,28 +40,17 @@ func (m *OperatorMonitorReport) Validate(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *OperatorMonitorReport) validateOperatorName(formats strfmt.Registry) error {
+func (m *OperatorMonitorReport) validateStatus(formats strfmt.Registry) error {
 
-	if err := validate.Required("operator_name", "body", m.OperatorName); err != nil {
-		return err
+	if swag.IsZero(m.Status) { // not required
+		return nil
 	}
 
-	return nil
-}
-
-func (m *OperatorMonitorReport) validateReport(formats strfmt.Registry) error {
-
-	if err := validate.Required("report", "body", m.Report); err != nil {
-		return err
-	}
-
-	if m.Report != nil {
-		if err := m.Report.Validate(formats); err != nil {
-			if ve, ok := err.(*errors.Validation); ok {
-				return ve.ValidateName("report")
-			}
-			return err
+	if err := m.Status.Validate(formats); err != nil {
+		if ve, ok := err.(*errors.Validation); ok {
+			return ve.ValidateName("status")
 		}
+		return err
 	}
 
 	return nil

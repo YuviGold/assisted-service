@@ -125,6 +125,9 @@ type Cluster struct {
 	// Pattern: ^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3}\/(?:(?:[0-9])|(?:[1-2][0-9])|(?:3[0-2])))|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,})/(?:(?:[0-9])|(?:[1-9][0-9])|(?:1[0-1][0-9])|(?:12[0-8])))$
 	MachineNetworkCidr string `json:"machine_network_cidr,omitempty"`
 
+	// Operators that are associated with this cluster.
+	MonitoredOperators []*MonitoredOperator `json:"monitored_operators" gorm:"foreignkey:ClusterID;association_foreignkey:ID"`
+
 	// Name of the OpenShift cluster.
 	Name string `json:"name,omitempty"`
 
@@ -137,9 +140,6 @@ type Cluster struct {
 
 	// Version of the OpenShift cluster.
 	OpenshiftVersion string `json:"openshift_version,omitempty"`
-
-	// Operators that are associated with this cluster.
-	Operators []*OperatorStatus `json:"operators" gorm:"foreignkey:ClusterID;association_foreignkey:ID"`
 
 	// org id
 	OrgID string `json:"org_id,omitempty"`
@@ -259,11 +259,11 @@ func (m *Cluster) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
-	if err := m.validateOpenshiftClusterID(formats); err != nil {
+	if err := m.validateMonitoredOperators(formats); err != nil {
 		res = append(res, err)
 	}
 
-	if err := m.validateOperators(formats); err != nil {
+	if err := m.validateOpenshiftClusterID(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -610,6 +610,31 @@ func (m *Cluster) validateMachineNetworkCidr(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *Cluster) validateMonitoredOperators(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.MonitoredOperators) { // not required
+		return nil
+	}
+
+	for i := 0; i < len(m.MonitoredOperators); i++ {
+		if swag.IsZero(m.MonitoredOperators[i]) { // not required
+			continue
+		}
+
+		if m.MonitoredOperators[i] != nil {
+			if err := m.MonitoredOperators[i].Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("monitored_operators" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
 func (m *Cluster) validateOpenshiftClusterID(formats strfmt.Registry) error {
 
 	if swag.IsZero(m.OpenshiftClusterID) { // not required
@@ -618,31 +643,6 @@ func (m *Cluster) validateOpenshiftClusterID(formats strfmt.Registry) error {
 
 	if err := validate.FormatOf("openshift_cluster_id", "body", "uuid", m.OpenshiftClusterID.String(), formats); err != nil {
 		return err
-	}
-
-	return nil
-}
-
-func (m *Cluster) validateOperators(formats strfmt.Registry) error {
-
-	if swag.IsZero(m.Operators) { // not required
-		return nil
-	}
-
-	for i := 0; i < len(m.Operators); i++ {
-		if swag.IsZero(m.Operators[i]) { // not required
-			continue
-		}
-
-		if m.Operators[i] != nil {
-			if err := m.Operators[i].Validate(formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("operators" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
-		}
-
 	}
 
 	return nil

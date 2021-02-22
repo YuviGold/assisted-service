@@ -6,157 +6,61 @@ package models
 // Editing this file might prove futile when you re-run the swagger generate command
 
 import (
+	"encoding/json"
+
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
-	"github.com/go-openapi/swag"
 	"github.com/go-openapi/validate"
 )
 
-// OperatorStatus operator status
+// OperatorStatus Represents the operator state.
 //
 // swagger:model operator-status
-type OperatorStatus struct {
+type OperatorStatus string
 
-	// The cluster that this operator is associated with.
-	// Required: true
-	// Format: uuid
-	ClusterID *strfmt.UUID `json:"cluster_id" gorm:"primary_key;foreignkey:Cluster"`
+const (
 
-	// Unique identifier of the object.
-	// Required: true
-	// Format: uuid
-	ID *strfmt.UUID `json:"id" gorm:"primary_key"`
+	// OperatorStatusFailed captures enum value "failed"
+	OperatorStatusFailed OperatorStatus = "failed"
 
-	// properties
-	Properties *Operator `json:"properties,omitempty"`
+	// OperatorStatusProgressing captures enum value "progressing"
+	OperatorStatusProgressing OperatorStatus = "progressing"
 
-	// report
-	Report *OperatorReport `json:"report,omitempty"`
+	// OperatorStatusAvailable captures enum value "available"
+	OperatorStatusAvailable OperatorStatus = "available"
+)
 
-	// Time at which the operator was last updated.
-	// Format: date-time
-	StatusUpdatedAt strfmt.DateTime `json:"status_updated_at,omitempty" gorm:"type:timestamp with time zone"`
+// for schema
+var operatorStatusEnum []interface{}
+
+func init() {
+	var res []OperatorStatus
+	if err := json.Unmarshal([]byte(`["failed","progressing","available"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		operatorStatusEnum = append(operatorStatusEnum, v)
+	}
+}
+
+func (m OperatorStatus) validateOperatorStatusEnum(path, location string, value OperatorStatus) error {
+	if err := validate.EnumCase(path, location, value, operatorStatusEnum, true); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Validate validates this operator status
-func (m *OperatorStatus) Validate(formats strfmt.Registry) error {
+func (m OperatorStatus) Validate(formats strfmt.Registry) error {
 	var res []error
 
-	if err := m.validateClusterID(formats); err != nil {
-		res = append(res, err)
-	}
-
-	if err := m.validateID(formats); err != nil {
-		res = append(res, err)
-	}
-
-	if err := m.validateProperties(formats); err != nil {
-		res = append(res, err)
-	}
-
-	if err := m.validateReport(formats); err != nil {
-		res = append(res, err)
-	}
-
-	if err := m.validateStatusUpdatedAt(formats); err != nil {
-		res = append(res, err)
+	// value enum
+	if err := m.validateOperatorStatusEnum("", "body", m); err != nil {
+		return err
 	}
 
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
-	return nil
-}
-
-func (m *OperatorStatus) validateClusterID(formats strfmt.Registry) error {
-
-	if err := validate.Required("cluster_id", "body", m.ClusterID); err != nil {
-		return err
-	}
-
-	if err := validate.FormatOf("cluster_id", "body", "uuid", m.ClusterID.String(), formats); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *OperatorStatus) validateID(formats strfmt.Registry) error {
-
-	if err := validate.Required("id", "body", m.ID); err != nil {
-		return err
-	}
-
-	if err := validate.FormatOf("id", "body", "uuid", m.ID.String(), formats); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *OperatorStatus) validateProperties(formats strfmt.Registry) error {
-
-	if swag.IsZero(m.Properties) { // not required
-		return nil
-	}
-
-	if m.Properties != nil {
-		if err := m.Properties.Validate(formats); err != nil {
-			if ve, ok := err.(*errors.Validation); ok {
-				return ve.ValidateName("properties")
-			}
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (m *OperatorStatus) validateReport(formats strfmt.Registry) error {
-
-	if swag.IsZero(m.Report) { // not required
-		return nil
-	}
-
-	if m.Report != nil {
-		if err := m.Report.Validate(formats); err != nil {
-			if ve, ok := err.(*errors.Validation); ok {
-				return ve.ValidateName("report")
-			}
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (m *OperatorStatus) validateStatusUpdatedAt(formats strfmt.Registry) error {
-
-	if swag.IsZero(m.StatusUpdatedAt) { // not required
-		return nil
-	}
-
-	if err := validate.FormatOf("status_updated_at", "body", "date-time", m.StatusUpdatedAt.String(), formats); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// MarshalBinary interface implementation
-func (m *OperatorStatus) MarshalBinary() ([]byte, error) {
-	if m == nil {
-		return nil, nil
-	}
-	return swag.WriteJSON(m)
-}
-
-// UnmarshalBinary interface implementation
-func (m *OperatorStatus) UnmarshalBinary(b []byte) error {
-	var res OperatorStatus
-	if err := swag.ReadJSON(b, &res); err != nil {
-		return err
-	}
-	*m = res
 	return nil
 }

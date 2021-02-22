@@ -25,7 +25,7 @@ type ListOfClusterOperatorsOK struct {
 	/*
 	  In: Body
 	*/
-	Payload models.OperatorsList `json:"body,omitempty"`
+	Payload models.MonitoredOperatorsList `json:"body,omitempty"`
 }
 
 // NewListOfClusterOperatorsOK creates ListOfClusterOperatorsOK with default headers values
@@ -35,13 +35,13 @@ func NewListOfClusterOperatorsOK() *ListOfClusterOperatorsOK {
 }
 
 // WithPayload adds the payload to the list of cluster operators o k response
-func (o *ListOfClusterOperatorsOK) WithPayload(payload models.OperatorsList) *ListOfClusterOperatorsOK {
+func (o *ListOfClusterOperatorsOK) WithPayload(payload models.MonitoredOperatorsList) *ListOfClusterOperatorsOK {
 	o.Payload = payload
 	return o
 }
 
 // SetPayload sets the payload to the list of cluster operators o k response
-func (o *ListOfClusterOperatorsOK) SetPayload(payload models.OperatorsList) {
+func (o *ListOfClusterOperatorsOK) SetPayload(payload models.MonitoredOperatorsList) {
 	o.Payload = payload
 }
 
@@ -52,7 +52,7 @@ func (o *ListOfClusterOperatorsOK) WriteResponse(rw http.ResponseWriter, produce
 	payload := o.Payload
 	if payload == nil {
 		// return empty array
-		payload = models.OperatorsList{}
+		payload = models.MonitoredOperatorsList{}
 	}
 
 	if err := producer.Produce(rw, payload); err != nil {

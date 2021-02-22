@@ -13,13 +13,13 @@ import (
 	"github.com/go-openapi/swag"
 )
 
-// OperatorsList operators list
+// MonitoredOperatorsList monitored operators list
 //
-// swagger:model operators-list
-type OperatorsList []*Operator
+// swagger:model monitored-operators-list
+type MonitoredOperatorsList []*MonitoredOperator
 
-// Validate validates this operators list
-func (m OperatorsList) Validate(formats strfmt.Registry) error {
+// Validate validates this monitored operators list
+func (m MonitoredOperatorsList) Validate(formats strfmt.Registry) error {
 	var res []error
 
 	for i := 0; i < len(m); i++ {

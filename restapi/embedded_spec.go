@@ -3876,7 +3876,7 @@ func init() {
           "200": {
             "description": "Success.",
             "schema": {
-              "$ref": "#/definitions/operators-list"
+              "$ref": "#/definitions/monitored-operators-list"
             }
           },
           "401": {
@@ -4311,7 +4311,7 @@ func init() {
           "200": {
             "description": "Success.",
             "schema": {
-              "$ref": "#/definitions/operators-list"
+              "$ref": "#/definitions/monitored-operators-list"
             }
           },
           "401": {
@@ -4576,6 +4576,15 @@ func init() {
           "type": "string",
           "pattern": "^(?:(?:(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\/(?:(?:[0-9])|(?:[1-2][0-9])|(?:3[0-2])))|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,})/(?:(?:[0-9])|(?:[1-9][0-9])|(?:1[0-1][0-9])|(?:12[0-8])))$"
         },
+        "monitored_operators": {
+          "description": "Operators that are associated with this cluster.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/monitored-operator"
+          },
+          "x-go-custom-tag": "gorm:\"foreignkey:ClusterID;association_foreignkey:ID\""
+        },
         "name": {
           "description": "Name of the OpenShift cluster.",
           "type": "string"
@@ -4592,15 +4601,6 @@ func init() {
         "openshift_version": {
           "description": "Version of the OpenShift cluster.",
           "type": "string"
-        },
-        "operators": {
-          "description": "Operators that are associated with this cluster.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/operator-status"
-          },
-          "x-go-custom-tag": "gorm:\"foreignkey:ClusterID;association_foreignkey:ID\""
         },
         "org_id": {
           "type": "string"
@@ -6306,6 +6306,46 @@ func init() {
         }
       }
     },
+    "monitored-operator": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Unique name of the operator.",
+          "type": "string"
+        },
+        "operator_type": {
+          "$ref": "#/definitions/operator-type"
+        },
+        "properties": {
+          "description": "Blob of operator-dependent parameters that are required for installation.",
+          "type": "string",
+          "x-go-custom-tag": "gorm:\"type:text\""
+        },
+        "status": {
+          "$ref": "#/definitions/operator-status"
+        },
+        "status_info": {
+          "description": "Detailed information about the operator state.",
+          "type": "string"
+        },
+        "status_updated_at": {
+          "description": "Time at which the operator was last updated.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-custom-tag": "gorm:\"type:timestamp with time zone\""
+        },
+        "timeout_seconds": {
+          "description": "Positive number represents a timeout in seconds for the operator to be available.",
+          "type": "integer"
+        }
+      }
+    },
+    "monitored-operators-list": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/monitored-operator"
+      }
+    },
     "ntp_source": {
       "type": "object",
       "properties": {
@@ -6383,56 +6423,15 @@ func init() {
         "$ref": "#/definitions/openshift-version"
       }
     },
-    "operator": {
+    "operator-monitor-report": {
       "type": "object",
-      "required": [
-        "name",
-        "operator_type"
-      ],
       "properties": {
         "name": {
           "description": "Unique name of the operator.",
           "type": "string"
         },
-        "operator_type": {
-          "description": "Kind of operator. Different types are monitored by the service differently.",
-          "type": "string",
-          "enum": [
-            "builtin",
-            "olm"
-          ]
-        },
-        "timeout_seconds": {
-          "description": "Positive number represents a timeout in seconds for the operator to be available.",
-          "type": "integer"
-        }
-      }
-    },
-    "operator-monitor-report": {
-      "type": "object",
-      "required": [
-        "operator_name",
-        "report"
-      ],
-      "properties": {
-        "operator_name": {
-          "description": "Unique name of the operator.",
-          "type": "string"
-        },
-        "report": {
-          "$ref": "#/definitions/operator-report"
-        }
-      }
-    },
-    "operator-report": {
-      "description": "Monitor report details of an operator.",
-      "type": "object",
-      "required": [
-        "status"
-      ],
-      "properties": {
         "status": {
-          "type": "string"
+          "$ref": "#/definitions/operator-status"
         },
         "status_info": {
           "description": "Detailed information about the operator state.",
@@ -6441,43 +6440,21 @@ func init() {
       }
     },
     "operator-status": {
-      "type": "object",
-      "required": [
-        "id",
-        "cluster_id"
-      ],
-      "properties": {
-        "cluster_id": {
-          "description": "The cluster that this operator is associated with.",
-          "type": "string",
-          "format": "uuid",
-          "x-go-custom-tag": "gorm:\"primary_key;foreignkey:Cluster\""
-        },
-        "id": {
-          "description": "Unique identifier of the object.",
-          "type": "string",
-          "format": "uuid",
-          "x-go-custom-tag": "gorm:\"primary_key\""
-        },
-        "properties": {
-          "$ref": "#/definitions/operator"
-        },
-        "report": {
-          "$ref": "#/definitions/operator-report"
-        },
-        "status_updated_at": {
-          "description": "Time at which the operator was last updated.",
-          "type": "string",
-          "format": "date-time",
-          "x-go-custom-tag": "gorm:\"type:timestamp with time zone\""
-        }
-      }
+      "description": "Represents the operator state.",
+      "type": "string",
+      "enum": [
+        "failed",
+        "progressing",
+        "available"
+      ]
     },
-    "operators-list": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/operator"
-      }
+    "operator-type": {
+      "description": "Kind of operator. Different types are monitored by the service differently.",
+      "type": "string",
+      "enum": [
+        "builtin",
+        "olm"
+      ]
     },
     "presigned": {
       "type": "object",
@@ -10530,7 +10507,7 @@ func init() {
           "200": {
             "description": "Success.",
             "schema": {
-              "$ref": "#/definitions/operators-list"
+              "$ref": "#/definitions/monitored-operators-list"
             }
           },
           "401": {
@@ -10965,7 +10942,7 @@ func init() {
           "200": {
             "description": "Success.",
             "schema": {
-              "$ref": "#/definitions/operators-list"
+              "$ref": "#/definitions/monitored-operators-list"
             }
           },
           "401": {
@@ -11358,6 +11335,15 @@ func init() {
           "type": "string",
           "pattern": "^(?:(?:(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\/(?:(?:[0-9])|(?:[1-2][0-9])|(?:3[0-2])))|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,})/(?:(?:[0-9])|(?:[1-9][0-9])|(?:1[0-1][0-9])|(?:12[0-8])))$"
         },
+        "monitored_operators": {
+          "description": "Operators that are associated with this cluster.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/monitored-operator"
+          },
+          "x-go-custom-tag": "gorm:\"foreignkey:ClusterID;association_foreignkey:ID\""
+        },
         "name": {
           "description": "Name of the OpenShift cluster.",
           "type": "string"
@@ -11374,15 +11360,6 @@ func init() {
         "openshift_version": {
           "description": "Version of the OpenShift cluster.",
           "type": "string"
-        },
-        "operators": {
-          "description": "Operators that are associated with this cluster.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/operator-status"
-          },
-          "x-go-custom-tag": "gorm:\"foreignkey:ClusterID;association_foreignkey:ID\""
         },
         "org_id": {
           "type": "string"
@@ -13015,6 +12992,46 @@ func init() {
         }
       }
     },
+    "monitored-operator": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Unique name of the operator.",
+          "type": "string"
+        },
+        "operator_type": {
+          "$ref": "#/definitions/operator-type"
+        },
+        "properties": {
+          "description": "Blob of operator-dependent parameters that are required for installation.",
+          "type": "string",
+          "x-go-custom-tag": "gorm:\"type:text\""
+        },
+        "status": {
+          "$ref": "#/definitions/operator-status"
+        },
+        "status_info": {
+          "description": "Detailed information about the operator state.",
+          "type": "string"
+        },
+        "status_updated_at": {
+          "description": "Time at which the operator was last updated.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-custom-tag": "gorm:\"type:timestamp with time zone\""
+        },
+        "timeout_seconds": {
+          "description": "Positive number represents a timeout in seconds for the operator to be available.",
+          "type": "integer"
+        }
+      }
+    },
+    "monitored-operators-list": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/monitored-operator"
+      }
+    },
     "ntp_source": {
       "type": "object",
       "properties": {
@@ -13092,56 +13109,15 @@ func init() {
         "$ref": "#/definitions/openshift-version"
       }
     },
-    "operator": {
+    "operator-monitor-report": {
       "type": "object",
-      "required": [
-        "name",
-        "operator_type"
-      ],
       "properties": {
         "name": {
           "description": "Unique name of the operator.",
           "type": "string"
         },
-        "operator_type": {
-          "description": "Kind of operator. Different types are monitored by the service differently.",
-          "type": "string",
-          "enum": [
-            "builtin",
-            "olm"
-          ]
-        },
-        "timeout_seconds": {
-          "description": "Positive number represents a timeout in seconds for the operator to be available.",
-          "type": "integer"
-        }
-      }
-    },
-    "operator-monitor-report": {
-      "type": "object",
-      "required": [
-        "operator_name",
-        "report"
-      ],
-      "properties": {
-        "operator_name": {
-          "description": "Unique name of the operator.",
-          "type": "string"
-        },
-        "report": {
-          "$ref": "#/definitions/operator-report"
-        }
-      }
-    },
-    "operator-report": {
-      "description": "Monitor report details of an operator.",
-      "type": "object",
-      "required": [
-        "status"
-      ],
-      "properties": {
         "status": {
-          "type": "string"
+          "$ref": "#/definitions/operator-status"
         },
         "status_info": {
           "description": "Detailed information about the operator state.",
@@ -13150,43 +13126,21 @@ func init() {
       }
     },
     "operator-status": {
-      "type": "object",
-      "required": [
-        "id",
-        "cluster_id"
-      ],
-      "properties": {
-        "cluster_id": {
-          "description": "The cluster that this operator is associated with.",
-          "type": "string",
-          "format": "uuid",
-          "x-go-custom-tag": "gorm:\"primary_key;foreignkey:Cluster\""
-        },
-        "id": {
-          "description": "Unique identifier of the object.",
-          "type": "string",
-          "format": "uuid",
-          "x-go-custom-tag": "gorm:\"primary_key\""
-        },
-        "properties": {
-          "$ref": "#/definitions/operator"
-        },
-        "report": {
-          "$ref": "#/definitions/operator-report"
-        },
-        "status_updated_at": {
-          "description": "Time at which the operator was last updated.",
-          "type": "string",
-          "format": "date-time",
-          "x-go-custom-tag": "gorm:\"type:timestamp with time zone\""
-        }
-      }
+      "description": "Represents the operator state.",
+      "type": "string",
+      "enum": [
+        "failed",
+        "progressing",
+        "available"
+      ]
     },
-    "operators-list": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/operator"
-      }
+    "operator-type": {
+      "description": "Kind of operator. Different types are monitored by the service differently.",
+      "type": "string",
+      "enum": [
+        "builtin",
+        "olm"
+      ]
     },
     "presigned": {
       "type": "object",
