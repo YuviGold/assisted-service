@@ -90,7 +90,7 @@ func PrepareTestDB(dbName string, extrasSchemas ...interface{}) *gorm.DB {
 		fmt.Sprintf("host=127.0.0.1 port=%s dbname=%s user=admin password=admin sslmode=disable", gDbCtx.GetPort(), strings.ToLower(dbName)))
 	Expect(err).ShouldNot(HaveOccurred())
 	// db = db.Debug()
-	db.AutoMigrate(&models.Host{}, &Cluster{})
+	db.AutoMigrate(&models.MonitoredOperator{}, &models.Host{}, &Cluster{})
 
 	if len(extrasSchemas) > 0 {
 		for _, schema := range extrasSchemas {

@@ -171,7 +171,7 @@ func (r *ClusterReconciler) createNewCluster(
 			Name:                     swag.String(spec.Name),
 			NoProxy:                  swag.String(spec.NoProxy),
 			OpenshiftVersion:         swag.String(spec.OpenshiftVersion),
-			Operators:                nil, // TODO: handle operators
+			OlmOperators:             nil, // TODO: handle operators
 			PullSecret:               swag.String(pullSecret),
 			ServiceNetworkCidr:       swag.String(spec.ServiceNetworkCidr),
 			SSHPublicKey:             spec.SSHPublicKey,

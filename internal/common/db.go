@@ -51,8 +51,15 @@ const (
 	SkipDeletedRecords    DeleteRecordsState = false
 )
 
-func LoadHostsFromDB(db *gorm.DB, conditions ...interface{}) *gorm.DB {
-	return db.Preload("Hosts", conditions...)
+const (
+	HostsTable              = "Hosts"
+	MonitoredOperatorsTable = "MonitoredOperators"
+)
+
+var clusterSubTables = [...]string{HostsTable, MonitoredOperatorsTable}
+
+func LoadTableFromDB(db *gorm.DB, tableName string, conditions ...interface{}) *gorm.DB {
+	return db.Preload(tableName, conditions...)
 }
 
 func GetClusterFromDB(db *gorm.DB, clusterId strfmt.UUID, eagerLoading EagerLoadingState) (*Cluster, error) {
@@ -65,7 +72,8 @@ func GetClusterFromDB(db *gorm.DB, clusterId strfmt.UUID, eagerLoading EagerLoad
 }
 
 func GetClusterFromDBWithoutDisabledHosts(db *gorm.DB, clusterId strfmt.UUID) (*Cluster, error) {
-	db = LoadHostsFromDB(db, "status <> ?", models.HostStatusDisabled)
+	db = LoadTableFromDB(db, HostsTable, "status <> ?", models.HostStatusDisabled)
+	db = LoadTableFromDB(db, MonitoredOperatorsTable)
 	return GetClusterFromDB(db, clusterId, SkipEagerLoading)
 }
 
@@ -77,12 +85,14 @@ func GetClusterFromDBWhere(db *gorm.DB, eagerLoading EagerLoadingState, includeD
 	}
 
 	if eagerLoading {
-		db = LoadHostsFromDB(db, func(db *gorm.DB) *gorm.DB {
-			if includeDeleted {
-				return db.Unscoped()
-			}
-			return db
-		})
+		for _, tableName := range clusterSubTables[:] {
+			db = LoadTableFromDB(db, tableName, func(db *gorm.DB) *gorm.DB {
+				if includeDeleted {
+					return db.Unscoped()
+				}
+				return db
+			})
+		}
 	}
 
 	err := db.Take(&cluster, where...).Error

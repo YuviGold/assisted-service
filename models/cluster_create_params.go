@@ -7,6 +7,7 @@ package models
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
@@ -64,7 +65,7 @@ type ClusterCreateParams struct {
 	NoProxy *string `json:"no_proxy,omitempty"`
 
 	// List of OLM operators to be installed.
-	OlmOperators []string `json:"olm_operators"`
+	OlmOperators []*OperatorCreateParams `json:"olm_operators"`
 
 	// Version of the OpenShift cluster.
 	// Required: true
@@ -109,6 +110,10 @@ func (m *ClusterCreateParams) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateName(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateOlmOperators(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -228,6 +233,31 @@ func (m *ClusterCreateParams) validateName(formats strfmt.Registry) error {
 
 	if err := validate.MaxLength("name", "body", string(*m.Name), 54); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (m *ClusterCreateParams) validateOlmOperators(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.OlmOperators) { // not required
+		return nil
+	}
+
+	for i := 0; i < len(m.OlmOperators); i++ {
+		if swag.IsZero(m.OlmOperators[i]) { // not required
+			continue
+		}
+
+		if m.OlmOperators[i] != nil {
+			if err := m.OlmOperators[i].Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("olm_operators" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
 	}
 
 	return nil

@@ -63,18 +63,61 @@ func (mr *MockAPIMockRecorder) GenerateManifests(arg0 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateManifests", reflect.TypeOf((*MockAPI)(nil).GenerateManifests), arg0)
 }
 
-// GetOperatorStatus mocks base method
-func (m *MockAPI) GetOperatorStatus(arg0 *common.Cluster, arg1 models.OperatorType) string {
+// GetMonitoredOperatorsList mocks base method
+func (m *MockAPI) GetMonitoredOperatorsList() []*models.MonitoredOperator {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorStatus", arg0, arg1)
+	ret := m.ctrl.Call(m, "GetMonitoredOperatorsList")
+	ret0, _ := ret[0].([]*models.MonitoredOperator)
+	return ret0
+}
+
+// GetMonitoredOperatorsList indicates an expected call of GetMonitoredOperatorsList
+func (mr *MockAPIMockRecorder) GetMonitoredOperatorsList() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMonitoredOperatorsList", reflect.TypeOf((*MockAPI)(nil).GetMonitoredOperatorsList))
+}
+
+// GetOperatorByName mocks base method
+func (m *MockAPI) GetOperatorByName(arg0 string) (*models.MonitoredOperator, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorByName", arg0)
+	ret0, _ := ret[0].(*models.MonitoredOperator)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOperatorByName indicates an expected call of GetOperatorByName
+func (mr *MockAPIMockRecorder) GetOperatorByName(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorByName", reflect.TypeOf((*MockAPI)(nil).GetOperatorByName), arg0)
+}
+
+// GetOperatorStatusInfo mocks base method
+func (m *MockAPI) GetOperatorStatusInfo(arg0 *common.Cluster, arg1 string) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorStatusInfo", arg0, arg1)
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// GetOperatorStatus indicates an expected call of GetOperatorStatus
-func (mr *MockAPIMockRecorder) GetOperatorStatus(arg0, arg1 interface{}) *gomock.Call {
+// GetOperatorStatusInfo indicates an expected call of GetOperatorStatusInfo
+func (mr *MockAPIMockRecorder) GetOperatorStatusInfo(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorStatus", reflect.TypeOf((*MockAPI)(nil).GetOperatorStatus), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorStatusInfo", reflect.TypeOf((*MockAPI)(nil).GetOperatorStatusInfo), arg0, arg1)
+}
+
+// GetOperatorsByType mocks base method
+func (m *MockAPI) GetOperatorsByType(arg0 models.OperatorType) []*models.MonitoredOperator {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorsByType", arg0)
+	ret0, _ := ret[0].([]*models.MonitoredOperator)
+	return ret0
+}
+
+// GetOperatorsByType indicates an expected call of GetOperatorsByType
+func (mr *MockAPIMockRecorder) GetOperatorsByType(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorsByType", reflect.TypeOf((*MockAPI)(nil).GetOperatorsByType), arg0)
 }
 
 // ValidateOCSRequirements mocks base method

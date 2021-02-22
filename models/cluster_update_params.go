@@ -80,7 +80,7 @@ type ClusterUpdateParams struct {
 	NoProxy *string `json:"no_proxy,omitempty"`
 
 	// List of OLM operators to be installed.
-	OlmOperators []string `json:"olm_operators"`
+	OlmOperators []*OperatorCreateParams `json:"olm_operators"`
 
 	// The pull secret obtained from Red Hat OpenShift Cluster Manager at cloud.redhat.com/openshift/install/pull-secret.
 	PullSecret *string `json:"pull_secret,omitempty"`
@@ -140,6 +140,10 @@ func (m *ClusterUpdateParams) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateName(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateOlmOperators(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -334,6 +338,31 @@ func (m *ClusterUpdateParams) validateName(formats strfmt.Registry) error {
 
 	if err := validate.MaxLength("name", "body", string(*m.Name), 54); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (m *ClusterUpdateParams) validateOlmOperators(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.OlmOperators) { // not required
+		return nil
+	}
+
+	for i := 0; i < len(m.OlmOperators); i++ {
+		if swag.IsZero(m.OlmOperators[i]) { // not required
+			continue
+		}
+
+		if m.OlmOperators[i] != nil {
+			if err := m.OlmOperators[i].Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("olm_operators" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
 	}
 
 	return nil

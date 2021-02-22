@@ -2403,7 +2403,6 @@ var _ = Describe("Refresh Host", func() {
 				Expect(db.Take(&resultHost, "id = ? and cluster_id = ?", hostId.String(), clusterId.String()).Error).ToNot(HaveOccurred())
 				Expect(resultHost.Role).To(Equal(t.role))
 				Expect(resultHost.Status).To(Equal(&t.dstState))
-				fmt.Println(swag.StringValue(resultHost.StatusInfo))
 				t.statusInfoChecker.check(resultHost.StatusInfo)
 				if t.validationsChecker != nil {
 					t.validationsChecker.check(resultHost.ValidationsInfo)

@@ -2885,6 +2885,11 @@ definitions:
   monitored-operator:
     type: object
     properties:
+      cluster_id:
+        type: string
+        format: uuid
+        description: The cluster that this operator is associated with.
+        x-go-custom-tag: gorm:"primary_key;foreignkey:Cluster"
       name:
         type: string
         description: Unique name of the operator.
@@ -2929,6 +2934,16 @@ definitions:
     type: string
     enum: ['failed', 'progressing', 'available']
     description: Represents the operator state.
+
+  operator-create-params:
+    type: object
+    properties:
+      name:
+        type: string
+      properties:
+        type: string
+        description: Blob of operator-dependent parameters that are required for installation.
+        x-go-custom-tag: gorm:"type:text"
 
   monitored-operators-list:
     type: array
@@ -3424,7 +3439,7 @@ definitions:
         type: array
         description: List of OLM operators to be installed.
         items:
-          type: string
+          $ref: '#/definitions/operator-create-params'
 
   cluster-update-params:
     type: object
@@ -3564,7 +3579,7 @@ definitions:
         type: array
         description: List of OLM operators to be installed.
         items:
-          type: string
+          $ref: '#/definitions/operator-create-params'
 
   add-hosts-cluster-create-params:
     type: object

@@ -43,24 +43,13 @@ type Config struct {
 	OCSDeploymentType              string `envconfig:"OCS_DEPLOYMENT_TYPE" default:"None"`
 }
 
-func setOperatorStatus(cluster *models.Cluster, status string) error {
-	var operators models.Operators
-	err := json.Unmarshal([]byte(cluster.Operators), &operators)
-	if err != nil {
-		return err
-	}
-	for _, operator := range operators {
-		if operator.OperatorType == models.OperatorTypeOcs {
-			operator.Status = status
+func setOperatorStatusInfo(cluster *models.Cluster, statusInfo string) error {
+	for _, currOperator := range cluster.MonitoredOperators {
+		if currOperator.Name == Operator.Name {
+			currOperator.StatusInfo = statusInfo
 			break
 		}
 	}
-	clusterOperators, err := json.Marshal(operators)
-	if err != nil {
-		return err
-	}
-
-	cluster.Operators = string(clusterOperators)
 	return nil
 }
 
@@ -73,7 +62,7 @@ func (o *ocsValidator) ValidateOCSRequirements(cluster *models.Cluster) string {
 
 	if int64(len(hosts)) < o.OCSRequiredHosts {
 		status = "Insufficient hosts to deploy OCS. A minimum of 3 hosts is required to deploy OCS. "
-		err = setOperatorStatus(cluster, status)
+		err = setOperatorStatusInfo(cluster, status)
 		if err != nil {
 			o.log.Error("Failed to set Operator status ", err)
 			return validationFailure
@@ -101,7 +90,7 @@ func (o *ocsValidator) ValidateOCSRequirements(cluster *models.Cluster) string {
 		status = "Not supporting OCS Installation for 3 Masters and 2 Workers"
 		o.log.Info(status)
 		o.log.Info("Setting Operator Status")
-		err = setOperatorStatus(cluster, status)
+		err = setOperatorStatusInfo(cluster, status)
 		if err != nil {
 			o.log.Error("Failed to set Operator status ", err)
 			return validationFailure
@@ -127,7 +116,7 @@ func (o *ocsValidator) ValidateOCSRequirements(cluster *models.Cluster) string {
 		for _, hostStatus := range insufficientHosts {
 			status = status + hostStatus + ".\n"
 		}
-		err = setOperatorStatus(cluster, status)
+		err = setOperatorStatusInfo(cluster, status)
 		if err != nil {
 			o.log.Error("Failed to set Operator status ", err)
 			return validationFailure
@@ -140,7 +129,7 @@ func (o *ocsValidator) ValidateOCSRequirements(cluster *models.Cluster) string {
 	if diskCount%3 != 0 {
 		status = "Total disks on the cluster must be a multiple of 3"
 		o.log.Info(status)
-		err = setOperatorStatus(cluster, status)
+		err = setOperatorStatusInfo(cluster, status)
 		if err != nil {
 			o.log.Error("Failed to set Operator status ", err)
 		}
@@ -152,7 +141,7 @@ func (o *ocsValidator) ValidateOCSRequirements(cluster *models.Cluster) string {
 	canDeployOCS, status := o.validateOCS(o.log, hosts, cpuCount, totalRAM, diskCount, hostsWithDisks)
 
 	o.log.Info(status)
-	err = setOperatorStatus(cluster, status)
+	err = setOperatorStatusInfo(cluster, status)
 	if err != nil {
 		o.log.Error("Failed to set Operator status ", err)
 		return validationFailure

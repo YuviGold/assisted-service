@@ -50,7 +50,7 @@ type Config struct {
 	DummyIgnition        bool   `envconfig:"DUMMY_IGNITION"`
 }
 
-func New(log logrus.FieldLogger, kube client.Client, s3Client s3wrapper.API, cfg Config, operatorsManager *operators.Manager) *kubeJob {
+func New(log logrus.FieldLogger, kube client.Client, s3Client s3wrapper.API, cfg Config, operatorsManager operators.API) *kubeJob {
 	return &kubeJob{
 		Config:           cfg,
 		log:              log,
@@ -65,7 +65,7 @@ type kubeJob struct {
 	log              logrus.FieldLogger
 	kube             client.Client
 	s3Client         s3wrapper.API
-	operatorsManager *operators.Manager
+	operatorsManager operators.API
 }
 
 func (k *kubeJob) getJob(ctx context.Context, job *batch.Job, name, namespace string) error {

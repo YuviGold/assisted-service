@@ -1,9 +1,8 @@
 package operators
 
 import (
-	"encoding/json"
+	"fmt"
 
-	"github.com/go-openapi/swag"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/openshift/assisted-service/internal/common"
 	"github.com/openshift/assisted-service/internal/operators/lso"
@@ -12,14 +11,26 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Manager is responsible for performing operations against additional operators
-type Manager struct {
-	log                logrus.FieldLogger
-	ocsValidatorConfig *ocs.Config
-	ocsValidator       ocs.OcsValidator
+var OperatorCVO models.MonitoredOperator = models.MonitoredOperator{
+	Name:           "cvo",
+	OperatorType:   models.OperatorTypeBuiltin,
+	TimeoutSeconds: 60 * 60,
 }
 
-//go:generate  mockgen -package=operators -destination=mock_operators_api.go . API
+var OperatorConsole models.MonitoredOperator = models.MonitoredOperator{
+	Name:           "console",
+	OperatorType:   models.OperatorTypeBuiltin,
+	TimeoutSeconds: 60 * 60,
+}
+
+var monitoredOperators = [...]*models.MonitoredOperator{
+	&OperatorCVO,
+	&OperatorConsole,
+	&lso.Operator,
+	&ocs.Operator,
+}
+
+//go:generate mockgen -package=operators -destination=mock_operators_api.go . API
 type API interface {
 	// ValidateOCSRequirements validates OCS requirements
 	ValidateOCSRequirements(cluster *common.Cluster) string
@@ -28,12 +39,27 @@ type API interface {
 	GenerateManifests(cluster *common.Cluster) (map[string]string, error)
 	// AnyOperatorEnabled checks whether any operator has been enabled for the given cluster
 	AnyOperatorEnabled(cluster *common.Cluster) bool
-	// GetOperatorStatus gets status of an operator of given type.
-	GetOperatorStatus(cluster *common.Cluster, operatorType models.OperatorType) string
+	// GetOperatorStatusInfo gets status info of an operator of given name.
+	GetOperatorStatusInfo(cluster *common.Cluster, operatorName string) string
+	// GetMonitoredOperatorsList returns the monitored operators available by the manager.
+	GetMonitoredOperatorsList() []*models.MonitoredOperator
+	// GetOperatorByName the manager's supported operator object by name.
+	GetOperatorByName(operatorName string) (*models.MonitoredOperator, error)
+	// GetOperatorsByType returns the manager's supported operator objects by type.
+	GetOperatorsByType(operatorType models.OperatorType) []*models.MonitoredOperator
+}
+
+// Manager is responsible for performing operations against additional operators
+type Manager struct {
+	API
+	log                logrus.FieldLogger
+	ocsValidatorConfig *ocs.Config
+	ocsValidator       ocs.OcsValidator
+	monitoredOperators []*models.MonitoredOperator
 }
 
 // NewManager creates new instance of an Operator Manager
-func NewManager(log logrus.FieldLogger) Manager {
+func NewManager(log logrus.FieldLogger) *Manager {
 	cfg := ocs.Config{}
 	err := envconfig.Process("myapp", &cfg)
 	if err != nil {
@@ -43,12 +69,13 @@ func NewManager(log logrus.FieldLogger) Manager {
 }
 
 // NewManagerWithConfig creates new instance of an Operator Manager
-func NewManagerWithConfig(log logrus.FieldLogger, cfg *ocs.Config) Manager {
+func NewManagerWithConfig(log logrus.FieldLogger, cfg *ocs.Config) *Manager {
 	ocsValidator := ocs.NewOCSValidator(log.WithField("pkg", "ocs-operator-state"), cfg)
-	return Manager{
+	return &Manager{
 		log:                log,
 		ocsValidatorConfig: cfg,
 		ocsValidator:       ocsValidator,
+		monitoredOperators: monitoredOperators[:],
 	}
 }
 
@@ -95,22 +122,17 @@ func (mgr *Manager) AnyOperatorEnabled(cluster *common.Cluster) bool {
 
 // ValidateOCSRequirements validates OCS requirements. Returns "true" if OCS operator is not deployed
 func (mgr *Manager) ValidateOCSRequirements(cluster *common.Cluster) string {
-	if isEnabled(cluster, models.OperatorTypeOcs) {
+	if IsEnabled(cluster, ocs.Operator.Name) {
 		return mgr.ocsValidator.ValidateOCSRequirements(&cluster.Cluster)
 	}
 	return "success"
 }
 
-// GetOperatorStatus gets status of an operator of given type.
-func (mgr *Manager) GetOperatorStatus(cluster *common.Cluster, operatorType models.OperatorType) string {
-	operator, err := findOperator(cluster, operatorType)
-	if err != nil {
-		return "Something went wrong with Unmarshalling operators"
-	}
+// GetOperatorStatusInfo gets status of an operator of given type.
+func (mgr *Manager) GetOperatorStatusInfo(cluster *common.Cluster, operatorName string) string {
+	operator := findOperator(cluster, operatorName)
 	if operator != nil {
-		if swag.BoolValue(operator.Enabled) {
-			return operator.Status
-		}
+		return operator.StatusInfo
 	}
 	return "OCS is disabled"
 }
@@ -126,33 +148,48 @@ func (mgr *Manager) generateOCSManifests(cluster *common.Cluster) (map[string]st
 }
 
 func (mgr *Manager) checkLSOEnabled(cluster *common.Cluster) bool {
-	return isEnabled(cluster, models.OperatorTypeLso)
+	return IsEnabled(cluster, lso.Operator.Name)
 }
 
 func (mgr *Manager) checkOCSEnabled(cluster *common.Cluster) bool {
-	return isEnabled(cluster, models.OperatorTypeOcs)
+	return IsEnabled(cluster, ocs.Operator.Name)
 }
 
-func findOperator(cluster *common.Cluster, operatorType models.OperatorType) (*models.ClusterOperator, error) {
-	if cluster.Operators != "" {
-		var operators models.Operators
-		if err := json.Unmarshal([]byte(cluster.Operators), &operators); err != nil {
-			return nil, err
-		}
-		for _, operator := range operators {
-			if operator.OperatorType == operatorType {
-				return operator, nil
-			}
+func findOperator(cluster *common.Cluster, operatorName string) *models.MonitoredOperator {
+	for _, operator := range cluster.MonitoredOperators {
+		if operator.Name == operatorName {
+			return operator
 		}
 	}
-	return nil, nil
+	return nil
 }
 
-func isEnabled(cluster *common.Cluster, operatorType models.OperatorType) bool {
-	operator, _ := findOperator(cluster, operatorType)
-	if operator == nil {
-		return false
+func IsEnabled(cluster *common.Cluster, operatorName string) bool {
+	return findOperator(cluster, operatorName) != nil
+}
+
+func (mgr *Manager) GetMonitoredOperatorsList() []*models.MonitoredOperator {
+	return mgr.monitoredOperators[:]
+}
+
+func (mgr *Manager) GetOperatorByName(operatorName string) (*models.MonitoredOperator, error) {
+	for _, operator := range mgr.monitoredOperators {
+		if operator.Name == operatorName {
+			return operator, nil
+		}
 	}
 
-	return swag.BoolValue(operator.Enabled)
+	return nil, fmt.Errorf("Operator %s isn't supported", operatorName)
+}
+
+func (mgr *Manager) GetOperatorsByType(operatorType models.OperatorType) []*models.MonitoredOperator {
+	operators := make([]*models.MonitoredOperator, 0)
+
+	for _, operator := range mgr.monitoredOperators {
+		if operator.OperatorType == operatorType {
+			operators = append(operators, operator)
+		}
+	}
+
+	return operators
 }

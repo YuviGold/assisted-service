@@ -117,13 +117,13 @@ type installerGenerator struct {
 	encodedDhcpFileContents  string
 	s3Client                 s3wrapper.API
 	enableMetal3Provisioning bool
-	operatorsManager         *operators.Manager
+	operatorsManager         operators.API
 }
 
 // NewGenerator returns a generator that can generate ignition files
 func NewGenerator(workDir string, installerDir string, cluster *common.Cluster, releaseImage string, releaseImageMirror string,
 	serviceCACert string, s3Client s3wrapper.API, log logrus.FieldLogger,
-	operatorsManager *operators.Manager) Generator {
+	operatorsManager operators.API) Generator {
 	return &installerGenerator{
 		cluster:                  cluster,
 		log:                      log,

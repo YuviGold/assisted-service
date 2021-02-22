@@ -274,7 +274,7 @@ func main() {
 	manifestsGenerator := network.NewManifestsGenerator(manifestsApi)
 	operatorsManager := operators.NewManager(log)
 	clusterApi := cluster.NewManager(Options.ClusterConfig, log.WithField("pkg", "cluster-state"), db,
-		eventsHandler, hostApi, metricsManager, manifestsGenerator, lead, &operatorsManager)
+		eventsHandler, hostApi, metricsManager, manifestsGenerator, lead, operatorsManager)
 	bootFilesApi := bootfiles.NewBootFilesAPI(log.WithField("pkg", "bootfiles"), objectHandler)
 
 	clusterStateMonitor := thread.New(
@@ -300,7 +300,7 @@ func main() {
 	}
 
 	bm := bminventory.NewBareMetalInventory(db, log.WithField("pkg", "Inventory"), hostApi, clusterApi, Options.BMConfig,
-		generator, eventsHandler, objectHandler, metricsManager, *authHandler, ocpClient, ocmClient, lead, pullSecretValidator,
+		generator, eventsHandler, objectHandler, metricsManager, operatorsManager, *authHandler, ocpClient, ocmClient, lead, pullSecretValidator,
 		versionHandler, isoEditorFactory, crdUtils)
 
 	deletionWorker := thread.New(
@@ -455,7 +455,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", swag.StringValue(port)), h))
 }
 
-func newISOInstallConfigGenerator(log *logrus.Entry, objectHandler s3wrapper.API, operatorsManager operators.Manager) generator.ISOInstallConfigGenerator {
+func newISOInstallConfigGenerator(log *logrus.Entry, objectHandler s3wrapper.API, operatorsManager operators.API) generator.ISOInstallConfigGenerator {
 	var configGenerator generator.ISOInstallConfigGenerator
 	switch Options.DeployTarget {
 	case deployment_type_k8s:
@@ -463,9 +463,9 @@ func newISOInstallConfigGenerator(log *logrus.Entry, objectHandler s3wrapper.API
 		if err != nil {
 			log.WithError(err).Fatalf("failed to create controller-runtime client")
 		}
-		configGenerator = job.New(log.WithField("pkg", "k8s-job-wrapper"), kclient, objectHandler, Options.JobConfig, &operatorsManager)
+		configGenerator = job.New(log.WithField("pkg", "k8s-job-wrapper"), kclient, objectHandler, Options.JobConfig, operatorsManager)
 	case deployment_type_onprem, deployment_type_ocp:
-		configGenerator = job.NewLocalJob(log.WithField("pkg", "local-job-wrapper"), objectHandler, Options.JobConfig, &operatorsManager)
+		configGenerator = job.NewLocalJob(log.WithField("pkg", "local-job-wrapper"), objectHandler, Options.JobConfig, operatorsManager)
 	default:
 		log.Fatalf("not supported deploy target %s", Options.DeployTarget)
 	}
@@ -540,7 +540,7 @@ func (a *ApiEnabler) Enable() {
 func autoMigrationWithLeader(migrationLeader leader.ElectorInterface, db *gorm.DB, log logrus.FieldLogger) error {
 	return migrationLeader.RunWithLeader(context.Background(), func() error {
 		log.Infof("Start automigration")
-		err := db.AutoMigrate(&models.Host{}, &common.Cluster{}, &events.Event{}).Error
+		err := db.AutoMigrate(&models.Host{}, &models.MonitoredOperator{}, &common.Cluster{}, &events.Event{}).Error
 		if err != nil {
 			log.WithError(err).Fatal("Failed auto migration process")
 			return err

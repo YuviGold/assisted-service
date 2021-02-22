@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"text/template"
 
-	"github.com/go-openapi/swag"
 	"github.com/openshift/assisted-service/models"
 )
 
-var Operator models.Operator = models.Operator{
-	Name:           swag.String("lso"),
-	OperatorType:   swag.String(models.OperatorOperatorTypeOlm),
+var Operator models.MonitoredOperator = models.MonitoredOperator{
+	Name:           "lso",
+	OperatorType:   models.OperatorTypeOlm,
 	TimeoutSeconds: 60 * 60,
 }
 

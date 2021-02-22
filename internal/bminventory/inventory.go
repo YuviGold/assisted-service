@@ -294,7 +294,7 @@ type bareMetalInventory struct {
 	eventsHandler      events.Handler
 	objectHandler      s3wrapper.API
 	metricApi          metrics.API
-	operatorManagerApi operators.OperatorManagerAPI
+	operatorManagerApi operators.API
 	generator          generator.ISOInstallConfigGenerator
 	authHandler        auth.AuthHandler
 	k8sClient          k8sclient.K8SClient
@@ -328,7 +328,7 @@ func NewBareMetalInventory(
 	eventsHandler events.Handler,
 	objectHandler s3wrapper.API,
 	metricApi metrics.API,
-	operatorManagerApi operators.OperatorManagerAPI,
+	operatorManagerApi operators.API,
 	authHandler auth.AuthHandler,
 	k8sClient k8sclient.K8SClient,
 	ocmClient *ocm.Client,
@@ -636,23 +636,19 @@ func (b *bareMetalInventory) RegisterClusterInternal(
 		kubeKey = &types.NamespacedName{}
 	}
 
-	operatorsStatuses := make([]*models.OperatorStatus, 0)
-	for _, builtinOperator := range b.operatorManagerApi.GetOperatorsByType(models.OperatorOperatorTypeBuiltin) {
-		operatorsStatuses = append(operatorsStatuses, &models.OperatorStatus{
-			Properties: builtinOperator,
-		})
-	}
+	monitoredOperators := make([]*models.MonitoredOperator, 0)
+	monitoredOperators = append(monitoredOperators, b.operatorManagerApi.GetOperatorsByType(models.OperatorTypeBuiltin)...)
 
 	if params.NewClusterParams.OlmOperators != nil {
-		for _, operatorName := range params.NewClusterParams.OlmOperators {
-			operator, err := b.operatorManagerApi.GetOperatorByName(operatorName)
+		for _, newOperator := range params.NewClusterParams.OlmOperators {
+			var operator *models.MonitoredOperator
+			operator, err = b.operatorManagerApi.GetOperatorByName(newOperator.Name)
 			if err != nil {
 				return nil, common.NewApiError(http.StatusBadRequest, err)
 			}
+			operator.Properties = newOperator.Properties
 
-			operatorsStatuses = append(operatorsStatuses, &models.OperatorStatus{
-				Properties: operator,
-			})
+			monitoredOperators = append(monitoredOperators, operator)
 		}
 	}
 
@@ -679,7 +675,7 @@ func (b *bareMetalInventory) RegisterClusterInternal(
 			VipDhcpAllocation:        params.NewClusterParams.VipDhcpAllocation,
 			UserManagedNetworking:    params.NewClusterParams.UserManagedNetworking,
 			AdditionalNtpSource:      swag.StringValue(params.NewClusterParams.AdditionalNtpSource),
-			Operators:                operatorsStatuses,
+			MonitoredOperators:       monitoredOperators,
 			HighAvailabilityMode:     params.NewClusterParams.HighAvailabilityMode,
 		},
 		KubeKeyName:      kubeKey.Name,
@@ -1984,29 +1980,13 @@ func (b *bareMetalInventory) updateClusterData(ctx context.Context, cluster *com
 	}
 
 	if params.ClusterUpdateParams.OlmOperators != nil {
-		newListOfOperators := make([]*models.OperatorStatus, 0)
-
-		// Keep all the operators that aren't OLMs
-		for _, operator := range cluster.Operators {
-			if swag.StringValue(operator.Properties.OperatorType) != models.OperatorOperatorTypeOlm {
-				newListOfOperators = append(newListOfOperators, operator)
-			}
+		var newListOfOperators []*models.MonitoredOperator
+		newListOfOperators, err = b.updateMonitoredOperatorsList(cluster, params.ClusterUpdateParams.OlmOperators)
+		if err != nil {
+			return err
 		}
-
-		// Add the new ones
-		for _, olmOperator := range params.ClusterUpdateParams.OlmOperators {
-			operator, err := b.operatorManagerApi.GetOperatorByName(olmOperator)
-			if err != nil {
-				return common.NewApiError(http.StatusBadRequest, err)
-			}
-
-			newListOfOperators = append(newListOfOperators, &models.OperatorStatus{
-				Properties: operator,
-			})
-		}
-
 		updates["operators"] = newListOfOperators
-		cluster.Operators = newListOfOperators
+		cluster.MonitoredOperators = newListOfOperators
 	}
 
 	if params.ClusterUpdateParams.PullSecret != nil {
@@ -2028,6 +2008,31 @@ func (b *bareMetalInventory) updateClusterData(ctx context.Context, cluster *com
 	}
 
 	return nil
+}
+
+func (b *bareMetalInventory) updateMonitoredOperatorsList(cluster *common.Cluster,
+	olmOperators []*models.OperatorCreateParams) ([]*models.MonitoredOperator, error) {
+	newListOfOperators := make([]*models.MonitoredOperator, 0)
+
+	// Keep all the operators that aren't OLMs
+	for _, operator := range cluster.MonitoredOperators {
+		if operator.OperatorType != models.OperatorTypeOlm {
+			newListOfOperators = append(newListOfOperators, operator)
+		}
+	}
+
+	// Add the new ones
+	for _, newOperator := range olmOperators {
+		operator, err := b.operatorManagerApi.GetOperatorByName(newOperator.Name)
+		if err != nil {
+			return nil, common.NewApiError(http.StatusBadRequest, err)
+		}
+		operator.Properties = newOperator.Properties
+
+		newListOfOperators = append(newListOfOperators, operator)
+	}
+
+	return newListOfOperators, nil
 }
 
 func validateUserManagedNetworkConflicts(params *models.ClusterUpdateParams, log logrus.FieldLogger) error {
@@ -2260,7 +2265,7 @@ func (b *bareMetalInventory) ListClusters(ctx context.Context, params installer.
 	var dbClusters []*common.Cluster
 	var clusters []*models.Cluster
 	userFilter := identity.AddUserFilter(ctx, "")
-	query := common.LoadHostsFromDB(db, func(db *gorm.DB) *gorm.DB {
+	query := common.LoadTableFromDB(db, common.HostsTable, func(db *gorm.DB) *gorm.DB {
 		if swag.BoolValue(params.GetUnregisteredClusters) {
 			return db.Unscoped()
 		}
@@ -2307,7 +2312,7 @@ func (b *bareMetalInventory) GetClusterInternal(ctx context.Context, params inst
 		db = b.db.Unscoped()
 	}
 
-	if err := common.LoadHostsFromDB(db, func(db *gorm.DB) *gorm.DB {
+	if err := common.LoadTableFromDB(db, common.HostsTable, func(db *gorm.DB) *gorm.DB {
 		if swag.BoolValue(params.GetUnregisteredClusters) {
 			return db.Unscoped()
 		}

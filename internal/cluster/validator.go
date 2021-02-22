@@ -12,6 +12,7 @@ import (
 	"github.com/openshift/assisted-service/internal/host"
 	"github.com/openshift/assisted-service/internal/network"
 	"github.com/openshift/assisted-service/internal/operators"
+	"github.com/openshift/assisted-service/internal/operators/ocs"
 	"github.com/openshift/assisted-service/models"
 	"github.com/sirupsen/logrus"
 )
@@ -538,10 +539,9 @@ func (v *clusterValidator) isOcsRequirementsSatisfied(c *clusterPreprocessContex
 }
 
 func (v *clusterValidator) printOcsRequirementsSatisfied(c *clusterPreprocessContext, status validationStatus) string {
-
 	switch status {
 	case ValidationSuccess, ValidationFailure:
-		return v.operatorsManager.GetOperatorStatus(c.cluster, models.OperatorTypeOcs)
+		return v.operatorsManager.GetOperatorStatusInfo(c.cluster, ocs.Operator.Name)
 	case ValidationPending:
 		return "Missing Inventory in some of the hosts"
 	default:

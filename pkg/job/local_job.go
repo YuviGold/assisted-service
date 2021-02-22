@@ -17,10 +17,10 @@ type localJob struct {
 	Config
 	log              logrus.FieldLogger
 	s3Client         s3wrapper.API
-	operatorsManager *operators.Manager
+	operatorsManager operators.API
 }
 
-func NewLocalJob(log logrus.FieldLogger, s3Client s3wrapper.API, cfg Config, operatorsManager *operators.Manager) *localJob {
+func NewLocalJob(log logrus.FieldLogger, s3Client s3wrapper.API, cfg Config, operatorsManager operators.API) *localJob {
 	return &localJob{
 		Config:           cfg,
 		log:              log,

@@ -4745,7 +4745,7 @@ func init() {
           "description": "List of OLM operators to be installed.",
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/definitions/operator-create-params"
           }
         },
         "openshift_version": {
@@ -4947,7 +4947,7 @@ func init() {
           "description": "List of OLM operators to be installed.",
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/definitions/operator-create-params"
           }
         },
         "pull_secret": {
@@ -6309,6 +6309,12 @@ func init() {
     "monitored-operator": {
       "type": "object",
       "properties": {
+        "cluster_id": {
+          "description": "The cluster that this operator is associated with.",
+          "type": "string",
+          "format": "uuid",
+          "x-go-custom-tag": "gorm:\"primary_key;foreignkey:Cluster\""
+        },
         "name": {
           "description": "Unique name of the operator.",
           "type": "string"
@@ -6421,6 +6427,19 @@ func init() {
       "type": "object",
       "additionalProperties": {
         "$ref": "#/definitions/openshift-version"
+      }
+    },
+    "operator-create-params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "properties": {
+          "description": "Blob of operator-dependent parameters that are required for installation.",
+          "type": "string",
+          "x-go-custom-tag": "gorm:\"type:text\""
+        }
       }
     },
     "operator-monitor-report": {
@@ -11504,7 +11523,7 @@ func init() {
           "description": "List of OLM operators to be installed.",
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/definitions/operator-create-params"
           }
         },
         "openshift_version": {
@@ -11666,7 +11685,7 @@ func init() {
           "description": "List of OLM operators to be installed.",
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/definitions/operator-create-params"
           }
         },
         "pull_secret": {
@@ -12995,6 +13014,12 @@ func init() {
     "monitored-operator": {
       "type": "object",
       "properties": {
+        "cluster_id": {
+          "description": "The cluster that this operator is associated with.",
+          "type": "string",
+          "format": "uuid",
+          "x-go-custom-tag": "gorm:\"primary_key;foreignkey:Cluster\""
+        },
         "name": {
           "description": "Unique name of the operator.",
           "type": "string"
@@ -13107,6 +13132,19 @@ func init() {
       "type": "object",
       "additionalProperties": {
         "$ref": "#/definitions/openshift-version"
+      }
+    },
+    "operator-create-params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "properties": {
+          "description": "Blob of operator-dependent parameters that are required for installation.",
+          "type": "string",
+          "x-go-custom-tag": "gorm:\"type:text\""
+        }
       }
     },
     "operator-monitor-report": {

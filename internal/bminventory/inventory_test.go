@@ -40,6 +40,7 @@ import (
 	"github.com/openshift/assisted-service/internal/isoeditor"
 	"github.com/openshift/assisted-service/internal/metrics"
 	"github.com/openshift/assisted-service/internal/operators"
+	"github.com/openshift/assisted-service/internal/operators/lso"
 	"github.com/openshift/assisted-service/internal/versions"
 	"github.com/openshift/assisted-service/models"
 	"github.com/openshift/assisted-service/pkg/auth"
@@ -74,7 +75,27 @@ var (
 	mockK8sClient        *k8sclient.MockK8SClient
 	mockCRDUtils         *MockCRDUtils
 	mockAccountsMgmt     *ocm.MockOCMAccountsMgmt
+	mockOperatorManager  *operators.MockAPI
 )
+
+func mockClusterRegisterSteps() {
+	mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true).Times(1)
+	mockOperatorManager.EXPECT().GetOperatorsByType(models.OperatorTypeBuiltin).Return([]*models.MonitoredOperator{}).Times(1)
+}
+
+func mockClusterRegisterSuccess(bm *bareMetalInventory, withEvents bool) {
+	mockClusterRegisterSteps()
+	mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+
+	if withEvents {
+		mockEvents.EXPECT().AddEvent(gomock.Any(), gomock.Any(), nil, models.EventSeverityInfo, gomock.Any(), gomock.Any()).Times(2)
+	}
+}
+
+func mockAMSSubscription(ctx context.Context) {
+	mockAccountsMgmt.EXPECT().CreateSubscription(ctx, gomock.Any()).Return(&amgmtv1.Subscription{}, nil)
+}
 
 func TestValidator(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -1854,8 +1875,6 @@ var _ = Describe("cluster", func() {
 		return arr
 	}
 
-	validationsConfig := validations.Config{}
-
 	Context("Get", func() {
 		BeforeEach(func() {
 			clusterID = strfmt.UUID(uuid.New().String())
@@ -1918,19 +1937,12 @@ var _ = Describe("cluster", func() {
 	Context("Create non HA cluster", func() {
 		BeforeEach(func() {
 			mockDurationsSuccess()
-			v, err := validations.NewPullSecretValidator(validationsConfig)
-			Expect(err).ShouldNot(HaveOccurred())
-			bm.secretValidator = v
 		})
 		It("happy flow", func() {
 			bm.clusterApi = cluster.NewManager(cluster.Config{}, common.GetTestLog().WithField("pkg", "cluster-monitor"),
 				db, mockEvents, nil, nil, nil, nil, nil)
 
-			mockEvents.EXPECT().
-				AddEvent(gomock.Any(), gomock.Any(), nil, models.EventSeverityInfo, gomock.Any(), gomock.Any()).
-				Times(2)
-			mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-			mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true).Times(1)
+			mockClusterRegisterSuccess(bm, true)
 			noneHaMode := models.ClusterHighAvailabilityModeNone
 			MinimalOpenShiftVersionForNoneHA := "4.8"
 			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
@@ -1970,9 +1982,6 @@ var _ = Describe("cluster", func() {
 	Context("Update", func() {
 		BeforeEach(func() {
 			mockDurationsSuccess()
-			v, err := validations.NewPullSecretValidator(validationsConfig)
-			Expect(err).ShouldNot(HaveOccurred())
-			bm.secretValidator = v
 		})
 		It("update_cluster_while_installing", func() {
 			clusterID = strfmt.UUID(uuid.New().String())
@@ -1993,35 +2002,43 @@ var _ = Describe("cluster", func() {
 			Expect(reply).To(BeAssignableToTypeOf(common.NewApiError(http.StatusConflict, errors.Errorf("error"))))
 		})
 
-		It("Invalid pull-secret", func() {
-			pullSecret := "asdfasfda"
-			reply := bm.UpdateCluster(ctx, installer.UpdateClusterParams{
-				ClusterID: clusterID,
-				ClusterUpdateParams: &models.ClusterUpdateParams{
-					PullSecret: &pullSecret,
-				},
+		Context("check pull secret", func() {
+			BeforeEach(func() {
+				v, err := validations.NewPullSecretValidator(validations.Config{})
+				Expect(err).ShouldNot(HaveOccurred())
+				bm.secretValidator = v
 			})
-			Expect(reply).To(BeAssignableToTypeOf(common.NewApiError(http.StatusBadRequest, errors.Errorf(""))))
-		})
 
-		It("pull-secret with newline", func() {
-			mockSetConnectivityMajorityGroupsForCluster(mockClusterApi)
-			pullSecret := "{\"auths\":{\"cloud.openshift.com\":{\"auth\":\"dG9rZW46dGVzdAo=\",\"email\":\"coyote@acme.com\"}}}" // #nosec
-			pullSecretWithNewline := pullSecret + " \n"
-			clusterID = strfmt.UUID(uuid.New().String())
-			err := db.Create(&common.Cluster{Cluster: models.Cluster{
-				ID: &clusterID,
-			}}).Error
-			Expect(err).ShouldNot(HaveOccurred())
-			mockClusterApi.EXPECT().VerifyClusterUpdatability(gomock.Any()).Return(nil).Times(1)
-			mockClusterApi.EXPECT().RefreshStatus(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
-			reply := bm.UpdateCluster(ctx, installer.UpdateClusterParams{
-				ClusterID: clusterID,
-				ClusterUpdateParams: &models.ClusterUpdateParams{
-					PullSecret: &pullSecretWithNewline,
-				},
+			It("Invalid pull-secret", func() {
+				pullSecret := "asdfasfda"
+				reply := bm.UpdateCluster(ctx, installer.UpdateClusterParams{
+					ClusterID: clusterID,
+					ClusterUpdateParams: &models.ClusterUpdateParams{
+						PullSecret: &pullSecret,
+					},
+				})
+				Expect(reply).To(BeAssignableToTypeOf(common.NewApiError(http.StatusBadRequest, errors.Errorf(""))))
 			})
-			Expect(reply).To(BeAssignableToTypeOf(installer.NewUpdateClusterCreated()))
+
+			It("pull-secret with newline", func() {
+				mockSetConnectivityMajorityGroupsForCluster(mockClusterApi)
+				pullSecret := "{\"auths\":{\"cloud.openshift.com\":{\"auth\":\"dG9rZW46dGVzdAo=\",\"email\":\"coyote@acme.com\"}}}" // #nosec
+				pullSecretWithNewline := pullSecret + " \n"
+				clusterID = strfmt.UUID(uuid.New().String())
+				err := db.Create(&common.Cluster{Cluster: models.Cluster{
+					ID: &clusterID,
+				}}).Error
+				Expect(err).ShouldNot(HaveOccurred())
+				mockClusterApi.EXPECT().VerifyClusterUpdatability(gomock.Any()).Return(nil).Times(1)
+				mockClusterApi.EXPECT().RefreshStatus(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+				reply := bm.UpdateCluster(ctx, installer.UpdateClusterParams{
+					ClusterID: clusterID,
+					ClusterUpdateParams: &models.ClusterUpdateParams{
+						PullSecret: &pullSecretWithNewline,
+					},
+				})
+				Expect(reply).To(BeAssignableToTypeOf(installer.NewUpdateClusterCreated()))
+			})
 		})
 
 		It("update role in none ha mode, must fail", func() {
@@ -2066,150 +2083,88 @@ var _ = Describe("cluster", func() {
 			verifyApiError(reply, http.StatusBadRequest)
 		})
 
-		It("LSO install default value", func() {
-			bm.clusterApi = cluster.NewManager(cluster.Config{}, common.GetTestLog().WithField("pkg", "cluster-monitor"),
-				db, mockEvents, nil, nil, nil, nil, nil)
+		Context("Monitored Operators", func() {
+			It("OLM register default value - only builtins", func() {
+				bm.clusterApi = cluster.NewManager(cluster.Config{}, common.GetTestLog().WithField("pkg", "cluster-monitor"),
+					db, mockEvents, nil, nil, nil, nil, nil)
 
-			mockEvents.EXPECT().
-				AddEvent(gomock.Any(), gomock.Any(), nil, models.EventSeverityInfo, gomock.Any(), gomock.Any()).
-				Times(2)
-			mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-			mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true).Times(1)
+				mockClusterRegisterSuccess(bm, true)
 
-			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
-				NewClusterParams: &models.ClusterCreateParams{
-					Name:             swag.String("some-cluster-name"),
-					OpenshiftVersion: swag.String(common.TestDefaultConfig.OpenShiftVersion),
-					PullSecret:       swag.String("{\"auths\":{\"cloud.openshift.com\":{\"auth\":\"dG9rZW46dGVzdAo=\",\"email\":\"coyote@acme.com\"}}}"),
-				},
-			})
-			Expect(reflect.TypeOf(reply)).Should(Equal(reflect.TypeOf(installer.NewRegisterClusterCreated())))
-			actual := reply.(*installer.RegisterClusterCreated)
-			Expect(actual.Payload.Operators).To(BeEmpty())
-		})
-
-		It("OCS install default value", func() {
-			bm.clusterApi = cluster.NewManager(cluster.Config{}, common.GetTestLog().WithField("pkg", "cluster-monitor"),
-				db, mockEvents, nil, nil, nil, nil, nil)
-
-			mockEvents.EXPECT().
-				AddEvent(gomock.Any(), gomock.Any(), nil, models.EventSeverityInfo, gomock.Any(), gomock.Any()).
-				Times(2)
-			mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-			mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true).Times(1)
-
-			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
-				NewClusterParams: &models.ClusterCreateParams{
-					Name:             swag.String("some-cluster-name"),
-					OpenshiftVersion: swag.String(common.TestDefaultConfig.OpenShiftVersion),
-					PullSecret:       swag.String("{\"auths\":{\"cloud.openshift.com\":{\"auth\":\"dG9rZW46dGVzdAo=\",\"email\":\"coyote@acme.com\"}}}"),
-				},
-			})
-			Expect(reflect.TypeOf(reply)).Should(Equal(reflect.TypeOf(installer.NewRegisterClusterCreated())))
-			actual := reply.(*installer.RegisterClusterCreated)
-			Expect(actual.Payload.Operators).To(BeEmpty())
-		})
-
-		It("LSO install non default value", func() {
-			bm.clusterApi = cluster.NewManager(cluster.Config{}, common.GetTestLog().WithField("pkg", "cluster-monitor"),
-				db, mockEvents, nil, nil, nil, nil, nil)
-
-			mockEvents.EXPECT().
-				AddEvent(gomock.Any(), gomock.Any(), nil, models.EventSeverityInfo, gomock.Any(), gomock.Any()).
-				Times(2)
-			mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-			mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true).Times(1)
-
-			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
-				NewClusterParams: &models.ClusterCreateParams{
-					Name:             swag.String("some-cluster-name"),
-					OpenshiftVersion: swag.String(common.TestDefaultConfig.OpenShiftVersion),
-					PullSecret:       swag.String("{\"auths\":{\"cloud.openshift.com\":{\"auth\":\"dG9rZW46dGVzdAo=\",\"email\":\"coyote@acme.com\"}}}"),
-					Operators: []*models.Operator{
-						{OperatorType: models.OperatorTypeLso, Enabled: swag.Bool(true)},
+				reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
+					NewClusterParams: &models.ClusterCreateParams{
+						Name:             swag.String("some-cluster-name"),
+						OpenshiftVersion: swag.String(common.TestDefaultConfig.OpenShiftVersion),
+						PullSecret:       swag.String("{\"auths\":{\"cloud.openshift.com\":{\"auth\":\"dG9rZW46dGVzdAo=\",\"email\":\"coyote@acme.com\"}}}"),
 					},
-				},
+				})
+				Expect(reflect.TypeOf(reply)).Should(Equal(reflect.TypeOf(installer.NewRegisterClusterCreated())))
+				actual := reply.(*installer.RegisterClusterCreated)
+				for _, operator := range actual.Payload.MonitoredOperators {
+					Expect(operator.OperatorType).To(Equal(models.OperatorTypeBuiltin))
+				}
 			})
-			Expect(reflect.TypeOf(reply)).Should(Equal(reflect.TypeOf(installer.NewRegisterClusterCreated())))
-			actual := reply.(*installer.RegisterClusterCreated)
-			operators := operatorsFromString(actual.Payload.Operators)
-			Expect(operators[0].OperatorType).To(Equal(models.OperatorTypeLso))
-			Expect(operators[0].Enabled).To(Equal(swag.Bool(true)))
-		})
 
-		It("OCS install non default value", func() {
-			bm.clusterApi = cluster.NewManager(cluster.Config{}, common.GetTestLog().WithField("pkg", "cluster-monitor"),
-				db, mockEvents, nil, nil, nil, nil, nil)
+			It("OLM register non default value", func() {
+				bm.clusterApi = cluster.NewManager(cluster.Config{}, common.GetTestLog().WithField("pkg", "cluster-monitor"),
+					db, mockEvents, nil, nil, nil, nil, nil)
 
-			mockEvents.EXPECT().
-				AddEvent(gomock.Any(), gomock.Any(), nil, models.EventSeverityInfo, gomock.Any(), gomock.Any()).
-				Times(2)
-			mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-			mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true).Times(1)
+				newOperatorName := lso.Operator.Name
+				newProperties := "blob-info"
 
-			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
-				NewClusterParams: &models.ClusterCreateParams{
-					Name:             swag.String("some-cluster-name"),
-					OpenshiftVersion: swag.String(common.TestDefaultConfig.OpenShiftVersion),
-					PullSecret:       swag.String("{\"auths\":{\"cloud.openshift.com\":{\"auth\":\"dG9rZW46dGVzdAo=\",\"email\":\"coyote@acme.com\"}}}"),
-					Operators: []*models.Operator{
-						{OperatorType: models.OperatorTypeOcs, Enabled: swag.Bool(true)},
+				mockClusterRegisterSuccess(bm, true)
+				mockOperatorManager.EXPECT().GetOperatorByName(newOperatorName).Return(&lso.Operator, nil).Times(1)
+
+				reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
+					NewClusterParams: &models.ClusterCreateParams{
+						Name:             swag.String("some-cluster-name"),
+						OpenshiftVersion: swag.String(common.TestDefaultConfig.OpenShiftVersion),
+						PullSecret:       swag.String("{\"auths\":{\"cloud.openshift.com\":{\"auth\":\"dG9rZW46dGVzdAo=\",\"email\":\"coyote@acme.com\"}}}"),
+						OlmOperators: []*models.OperatorCreateParams{
+							{Name: newOperatorName, Properties: newProperties},
+						},
 					},
-				},
+				})
+				Expect(reflect.TypeOf(reply)).Should(Equal(reflect.TypeOf(installer.NewRegisterClusterCreated())))
+				actual := reply.(*installer.RegisterClusterCreated)
+				for _, operator := range actual.Payload.MonitoredOperators {
+					if operator.OperatorType == models.OperatorTypeOlm {
+						Expect(operator.Name).To(Equal(newOperatorName))
+						Expect(operator.Properties).To(Equal(newProperties))
+					}
+				}
 			})
-			Expect(reflect.TypeOf(reply)).Should(Equal(reflect.TypeOf(installer.NewRegisterClusterCreated())))
-			actual := reply.(*installer.RegisterClusterCreated)
-			operators := operatorsFromString(actual.Payload.Operators)
-			Expect(operators[0].OperatorType).To(Equal(models.OperatorTypeOcs))
-			Expect(operators[0].Enabled).To(Equal(swag.Bool(true)))
-		})
 
-		It("Update Install LSO", func() {
-			mockSetConnectivityMajorityGroupsForCluster(mockClusterApi)
-			clusterID = strfmt.UUID(uuid.New().String())
-			err := db.Create(&common.Cluster{Cluster: models.Cluster{
-				ID: &clusterID,
-			}}).Error
-			Expect(err).ShouldNot(HaveOccurred())
-			mockClusterApi.EXPECT().VerifyClusterUpdatability(gomock.Any()).Return(nil).Times(1)
-			mockClusterApi.EXPECT().RefreshStatus(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
-			reply := bm.UpdateCluster(ctx, installer.UpdateClusterParams{
-				ClusterID: clusterID,
-				ClusterUpdateParams: &models.ClusterUpdateParams{
-					Operators: []*models.Operator{
-						{OperatorType: models.OperatorTypeLso, Enabled: swag.Bool(true)},
-					},
-				},
-			})
-			Expect(reply).To(BeAssignableToTypeOf(installer.NewUpdateClusterCreated()))
-			actual := reply.(*installer.UpdateClusterCreated)
-			operators := operatorsFromString(actual.Payload.Operators)
-			Expect(operators[0].OperatorType).To(Equal(models.OperatorTypeLso))
-			Expect(operators[0].Enabled).To(Equal(swag.Bool(true)))
-		})
+			It("Update Install LSO", func() {
+				mockSetConnectivityMajorityGroupsForCluster(mockClusterApi)
+				clusterID = strfmt.UUID(uuid.New().String())
+				err := db.Create(&common.Cluster{Cluster: models.Cluster{
+					ID: &clusterID,
+				}}).Error
+				Expect(err).ShouldNot(HaveOccurred())
+				mockClusterApi.EXPECT().VerifyClusterUpdatability(gomock.Any()).Return(nil).Times(1)
+				mockClusterApi.EXPECT().RefreshStatus(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
 
-		It("Update Install OCS", func() {
-			mockSetConnectivityMajorityGroupsForCluster(mockClusterApi)
-			clusterID = strfmt.UUID(uuid.New().String())
-			err := db.Create(&common.Cluster{Cluster: models.Cluster{
-				ID: &clusterID,
-			}}).Error
-			Expect(err).ShouldNot(HaveOccurred())
-			mockClusterApi.EXPECT().VerifyClusterUpdatability(gomock.Any()).Return(nil).Times(1)
-			mockClusterApi.EXPECT().RefreshStatus(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
-			reply := bm.UpdateCluster(ctx, installer.UpdateClusterParams{
-				ClusterID: clusterID,
-				ClusterUpdateParams: &models.ClusterUpdateParams{
-					Operators: []*models.Operator{
-						{OperatorType: models.OperatorTypeOcs, Enabled: swag.Bool(true)},
+				newOperatorName := lso.Operator.Name
+				newProperties := "blob-info"
+				mockOperatorManager.EXPECT().GetOperatorByName(newOperatorName).Return(&lso.Operator, nil).Times(1)
+
+				reply := bm.UpdateCluster(ctx, installer.UpdateClusterParams{
+					ClusterID: clusterID,
+					ClusterUpdateParams: &models.ClusterUpdateParams{
+						OlmOperators: []*models.OperatorCreateParams{
+							{Name: newOperatorName, Properties: newProperties},
+						},
 					},
-				},
+				})
+				Expect(reply).To(BeAssignableToTypeOf(installer.NewUpdateClusterCreated()))
+				actual := reply.(*installer.UpdateClusterCreated)
+				for _, operator := range actual.Payload.MonitoredOperators {
+					if operator.OperatorType == models.OperatorTypeOlm {
+						Expect(operator.Name).To(Equal(newOperatorName))
+						Expect(operator.Properties).To(Equal(newProperties))
+					}
+				}
 			})
-			Expect(reply).To(BeAssignableToTypeOf(installer.NewUpdateClusterCreated()))
-			actual := reply.(*installer.UpdateClusterCreated)
-			operators := operatorsFromString(actual.Payload.Operators)
-			Expect(operators[0].OperatorType).To(Equal(models.OperatorTypeOcs))
-			Expect(operators[0].Enabled).To(Equal(swag.Bool(true)))
 		})
 
 		It("ssh key with newline", func() {
@@ -5222,21 +5177,8 @@ var _ = Describe("TestRegisterCluster", func() {
 		ctrl.Finish()
 	})
 
-	mockClusterRegisterSuccess := func() {
-		mockEvents.EXPECT().
-			AddEvent(gomock.Any(), gomock.Any(), nil, models.EventSeverityInfo, gomock.Any(), gomock.Any()).
-			Times(2)
-		mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-		mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true).Times(1)
-
-		if bm.Config.WithAMSSubscriptions {
-			mockAccountsMgmt.EXPECT().CreateSubscription(ctx, gomock.Any()).Return(&amgmtv1.Subscription{}, nil)
-		}
-	}
-
 	It("success", func() {
-		mockClusterRegisterSuccess()
+		mockClusterRegisterSuccess(bm, true)
 
 		reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 			NewClusterParams: &models.ClusterCreateParams{
@@ -5249,7 +5191,7 @@ var _ = Describe("TestRegisterCluster", func() {
 	})
 
 	It("UserManagedNetworking default value", func() {
-		mockClusterRegisterSuccess()
+		mockClusterRegisterSuccess(bm, true)
 
 		reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 			NewClusterParams: &models.ClusterCreateParams{
@@ -5264,7 +5206,7 @@ var _ = Describe("TestRegisterCluster", func() {
 	})
 
 	It("UserManagedNetworking non default value", func() {
-		mockClusterRegisterSuccess()
+		mockClusterRegisterSuccess(bm, true)
 
 		reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 			NewClusterParams: &models.ClusterCreateParams{
@@ -5311,7 +5253,7 @@ var _ = Describe("TestRegisterCluster", func() {
 			defaultNtpSource := "clock.redhat.com"
 			bm.Config.DefaultNTPSource = defaultNtpSource
 
-			mockClusterRegisterSuccess()
+			mockClusterRegisterSuccess(bm, true)
 
 			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 				NewClusterParams: &models.ClusterCreateParams{
@@ -5328,7 +5270,7 @@ var _ = Describe("TestRegisterCluster", func() {
 		It("NTPSource non default value", func() {
 			newNtpSource := "new.ntp.source"
 
-			mockClusterRegisterSuccess()
+			mockClusterRegisterSuccess(bm, true)
 
 			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 				NewClusterParams: &models.ClusterCreateParams{
@@ -5347,8 +5289,7 @@ var _ = Describe("TestRegisterCluster", func() {
 	It("cluster api failed to register", func() {
 		bm.clusterApi = mockClusterApi
 		mockClusterApi.EXPECT().RegisterCluster(ctx, gomock.Any()).Return(errors.Errorf("error")).Times(1)
-		mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
-		mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true).Times(1)
+		mockClusterRegisterSteps()
 
 		reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 			NewClusterParams: &models.ClusterCreateParams{
@@ -5362,7 +5303,7 @@ var _ = Describe("TestRegisterCluster", func() {
 
 	It("Host Networks default value", func() {
 		defaultHostNetworks := make([]*models.HostNetwork, 0)
-		mockClusterRegisterSuccess()
+		mockClusterRegisterSuccess(bm, true)
 
 		reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 			NewClusterParams: &models.ClusterCreateParams{
@@ -5379,6 +5320,7 @@ var _ = Describe("TestRegisterCluster", func() {
 	It("cluster api failed to register with invalid pull secret", func() {
 		mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(errors.New("error")).Times(1)
+		mockOperatorManager.EXPECT().GetOperatorsByType(models.OperatorTypeBuiltin).Return([]*models.MonitoredOperator{}).Times(1)
 		mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true).Times(1)
 
 		reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
@@ -5440,8 +5382,6 @@ var _ = Describe("AMS subscriptions", func() {
 		db = common.PrepareTestDB(dbName)
 		bm = createInventory(db, cfg)
 		bm.clusterApi = cluster.NewManager(cluster.Config{}, common.GetTestLog(), db, mockEvents, nil, nil, nil, nil, nil)
-		mockVersions.EXPECT().IsOpenshiftVersionSupported(gomock.Any()).Return(true)
-		mockSecretValidator.EXPECT().ValidatePullSecret(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	})
 
 	AfterEach(func() {
@@ -5451,11 +5391,8 @@ var _ = Describe("AMS subscriptions", func() {
 
 	Context("With AMS subscriptions", func() {
 		It("register cluster happy flow", func() {
-			mockAccountsMgmt.EXPECT().CreateSubscription(ctx, gomock.Any()).Return(&amgmtv1.Subscription{}, nil)
-			mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any())
-			mockEvents.EXPECT().AddEvent(ctx, gomock.Any(), nil, models.EventSeverityInfo, eventMsgMatcher{subStrings: []string{"Registered cluster"}}, gomock.Any())
-			mockEvents.EXPECT().AddEvent(ctx, gomock.Any(), nil, models.EventSeverityInfo, eventMsgMatcher{subStrings: []string{"Successfully registered cluster", "with id"}},
-				gomock.Any())
+			mockClusterRegisterSuccess(bm, true)
+			mockAMSSubscription(ctx)
 
 			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 				NewClusterParams: &models.ClusterCreateParams{
@@ -5474,6 +5411,7 @@ var _ = Describe("AMS subscriptions", func() {
 		It("register cluster - deregister if we failed to create AMS subscription", func() {
 			bm.clusterApi = mockClusterApi
 			mockClusterApi.EXPECT().RegisterCluster(ctx, gomock.Any()).Return(nil)
+			mockClusterRegisterSteps()
 			mockAccountsMgmt.EXPECT().CreateSubscription(ctx, gomock.Any()).Return(nil, errors.New("dummy"))
 			mockClusterApi.EXPECT().DeregisterCluster(ctx, gomock.Any())
 
@@ -5490,7 +5428,8 @@ var _ = Describe("AMS subscriptions", func() {
 		It("register cluster - delete AMS subscription if we failed to patch DB with ams_subscription_id", func() {
 			bm.clusterApi = mockClusterApi
 			mockClusterApi.EXPECT().RegisterCluster(ctx, gomock.Any()).Return(nil)
-			mockAccountsMgmt.EXPECT().CreateSubscription(ctx, gomock.Any()).Return(&amgmtv1.Subscription{}, nil)
+			mockClusterRegisterSteps()
+			mockAMSSubscription(ctx)
 			mockClusterApi.EXPECT().UpdateAmsSubscriptionID(ctx, gomock.Any(), strfmt.UUID("")).Return(common.NewApiError(http.StatusInternalServerError, errors.New("dummy")))
 			mockClusterApi.EXPECT().DeregisterCluster(ctx, gomock.Any())
 			mockAccountsMgmt.EXPECT().DeleteSubscription(ctx, strfmt.UUID("")).Return(nil)
@@ -5506,11 +5445,8 @@ var _ = Describe("AMS subscriptions", func() {
 		})
 
 		It("deregister cluster that don't have 'Reserved' subscriptions", func() {
-			mockAccountsMgmt.EXPECT().CreateSubscription(ctx, gomock.Any()).Return(&amgmtv1.Subscription{}, nil)
-			mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any())
-			mockEvents.EXPECT().AddEvent(ctx, gomock.Any(), nil, models.EventSeverityInfo, eventMsgMatcher{subStrings: []string{"Registered cluster"}}, gomock.Any())
-			mockEvents.EXPECT().AddEvent(ctx, gomock.Any(), nil, models.EventSeverityInfo, eventMsgMatcher{subStrings: []string{"Successfully registered cluster", "with id"}},
-				gomock.Any())
+			mockClusterRegisterSuccess(bm, true)
+			mockAMSSubscription(ctx)
 
 			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 				NewClusterParams: &models.ClusterCreateParams{
@@ -5531,10 +5467,7 @@ var _ = Describe("AMS subscriptions", func() {
 
 		It("register and deregister cluster happy flow - nil OCM client", func() {
 			bm.ocmClient = nil
-			mockMetric.EXPECT().ClusterRegistered(gomock.Any(), gomock.Any(), gomock.Any())
-			mockEvents.EXPECT().AddEvent(ctx, gomock.Any(), nil, models.EventSeverityInfo, eventMsgMatcher{subStrings: []string{"Registered cluster"}}, gomock.Any())
-			mockEvents.EXPECT().AddEvent(ctx, gomock.Any(), nil, models.EventSeverityInfo, eventMsgMatcher{subStrings: []string{"Successfully registered cluster", "with id"}},
-				gomock.Any())
+			mockClusterRegisterSuccess(bm, true)
 
 			reply := bm.RegisterCluster(ctx, installer.RegisterClusterParams{
 				NewClusterParams: &models.ClusterCreateParams{
@@ -6004,18 +5937,6 @@ func prepareK8NodeList(names, ips, roles, archituctures []string, readyStatuses 
 	return nodeList
 }
 
-func operatorsFromString(operatorsStr string) models.Operators {
-
-	if operatorsStr != "" {
-		var operators models.Operators
-		if err := json.Unmarshal([]byte(operatorsStr), &operators); err != nil {
-			return nil
-		}
-		return operators
-	}
-	return nil
-}
-
 func createInventory(db *gorm.DB, cfg Config) *bareMetalInventory {
 	ctrl = gomock.NewController(GinkgoT())
 
@@ -6032,9 +5953,10 @@ func createInventory(db *gorm.DB, cfg Config) *bareMetalInventory {
 	mockVersions = versions.NewMockHandler(ctrl)
 	mockIsoEditorFactory = isoeditor.NewMockFactory(ctrl)
 	mockCRDUtils = NewMockCRDUtils(ctrl)
+	mockOperatorManager = operators.NewMockAPI(ctrl)
 
 	return NewBareMetalInventory(db, common.GetTestLog(), mockHostApi, mockClusterApi, cfg,
-		mockGenerator, mockEvents, mockS3Client, mockMetric,
+		mockGenerator, mockEvents, mockS3Client, mockMetric, mockOperatorManager,
 		getTestAuthHandler(), mockK8sClient, ocmClient, nil, mockSecretValidator, mockVersions, mockIsoEditorFactory, mockCRDUtils)
 }
 

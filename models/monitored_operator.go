@@ -17,6 +17,10 @@ import (
 // swagger:model monitored-operator
 type MonitoredOperator struct {
 
+	// The cluster that this operator is associated with.
+	// Format: uuid
+	ClusterID strfmt.UUID `json:"cluster_id,omitempty" gorm:"primary_key;foreignkey:Cluster"`
+
 	// Unique name of the operator.
 	Name string `json:"name,omitempty"`
 
@@ -44,6 +48,10 @@ type MonitoredOperator struct {
 func (m *MonitoredOperator) Validate(formats strfmt.Registry) error {
 	var res []error
 
+	if err := m.validateClusterID(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateOperatorType(formats); err != nil {
 		res = append(res, err)
 	}
@@ -59,6 +67,19 @@ func (m *MonitoredOperator) Validate(formats strfmt.Registry) error {
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+func (m *MonitoredOperator) validateClusterID(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.ClusterID) { // not required
+		return nil
+	}
+
+	if err := validate.FormatOf("cluster_id", "body", "uuid", m.ClusterID.String(), formats); err != nil {
+		return err
+	}
+
 	return nil
 }
 
