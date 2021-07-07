@@ -59,7 +59,7 @@ for manifest in $(find ${__dir}/generated -type f); do
     tee < "${manifest}" >(oc apply -f -)
 done
 
-wait_for_condition "infraenv/${ASSISTED_INFRAENV_NAME}" "ImageCreated" "5m" "${SPOKE_NAMESPACE}"
+wait_for_condition "infraenv/${ASSISTED_INFRAENV_NAME}" "ImageCreated" "50m" "${SPOKE_NAMESPACE}"
 
 echo "Waiting until at least ${CONTROL_PLANE_COUNT} agents are available..."
 export -f wait_for_object_amount
